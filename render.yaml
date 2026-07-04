@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: tytb-profit-motive-mvp
+    runtime: python
+    plan: starter
+    buildCommand: "python3 -m py_compile server.py"
+    startCommand: "HOST=0.0.0.0 python3 server.py"
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: APP_USER
+        value: tina
+      - key: APP_PASSWORD
+        sync: false
+    disk:
+      name: tytb-data
+      mountPath: /var/data
+      sizeGB: 1

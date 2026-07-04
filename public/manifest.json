@@ -1,0 +1,18 @@
+{
+  "name": "Tina Your Tax Bestie Records",
+  "short_name": "TYTB Records",
+  "description": "Educational profit motive and contemporaneous recordkeeping app.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#227c73",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

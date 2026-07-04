@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1e3a4c"/>
+  <path d="M92 98h328v316H92z" fill="#ffffff"/>
+  <path d="M92 98h328v86H92z" fill="#227c73"/>
+  <path d="M148 244h216v32H148zm0 70h154v32H148z" fill="#1e3a4c"/>
+  <circle cx="374" cy="324" r="54" fill="#e7b648"/>
+  <text x="256" y="162" text-anchor="middle" font-family="Arial, sans-serif" font-size="66" font-weight="800" fill="#ffffff">TY</text>
+</svg>
