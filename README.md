@@ -144,3 +144,4 @@ This makes the product different from a plain bookkeeping tracker. The product i
 - PDF tax-professional review packet
 - Admin white-label tenant management
 - Cloud deployment option
+# tina-tax-bestie-mvp
