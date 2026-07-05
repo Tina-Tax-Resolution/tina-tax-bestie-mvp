@@ -16,13 +16,21 @@ Use Render for the first phone-ready MVP because this app already has:
 
 Do not enter real taxpayer/client records unless `APP_PASSWORD` is set.
 
-Render environment variables:
+Render environment variables for durable saved records:
 
 ```text
 DATA_DIR=/var/data
 APP_USER=tina
 APP_PASSWORD=<choose a strong private password>
 ```
+
+If you are using Render free/no-disk mode only for a temporary demo, either remove `DATA_DIR` or set it to:
+
+```text
+DATA_DIR=/tmp/tytb-profit-motive-data
+```
+
+Free/no-disk storage is temporary. Records may reset when the service restarts or redeploys.
 
 When the app opens, the browser will ask for:
 
@@ -48,8 +56,8 @@ Password: the value you set for APP_PASSWORD
 
 ```text
 Runtime: Python
-Build Command: python3 -m py_compile server.py
-Start Command: HOST=0.0.0.0 python3 server.py
+Build Command: PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile server.py
+Start Command: PYTHONPYCACHEPREFIX=/tmp HOST=0.0.0.0 python3 server.py
 ```
 
 4. Add a persistent disk:

@@ -53,8 +53,8 @@ Detailed deployment steps are in `DEPLOY_TO_RENDER.md`.
 2. Create a new Web Service from this folder/repository.
 3. Use these settings:
    - Runtime: Python
-   - Build command: `python3 -m py_compile server.py`
-   - Start command: `HOST=0.0.0.0 python3 server.py`
+   - Build command: `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile server.py`
+   - Start command: `PYTHONPYCACHEPREFIX=/tmp HOST=0.0.0.0 python3 server.py`
 4. Add a persistent disk:
    - Mount path: `/var/data`
    - Size: 1 GB to start
@@ -87,6 +87,8 @@ data/tytb_profit_motive.sqlite3
 
 - Local SQLite backend for stronger retention than browser-only storage
 - Private hosted access with username/password when `APP_PASSWORD` is set
+- Clean first-user experience with no preloaded demo income, expenses, or business activity
+- Business/activity typeahead suggestions for common work such as rideshare, delivery, trucking, creator, beauty, music, tax, and freelance services
 - Client Portal mode for novice users to quickly add income, expenses, brand gifts/barter, crypto, and proof
 - Tax Pro Review mode for seeing review flags, FMV items, evidence gaps, profit path, and export readiness
 - Multiple business/activity tracking so records are not mixed across activities
@@ -97,6 +99,8 @@ data/tytb_profit_motive.sqlite3
 - Fair market value tracking for non-cash compensation
 - Crypto token amount, wallet/exchange, and transaction hash fields
 - Schedule C line mapping after the user types an item; studio/studio time maps to line 20b rent or lease: other business property
+- Records screen defaults to the selected tax year only, with an optional show-all-years toggle
+- Current tax year is labeled as live year-to-date, while prior years remain separate
 - Profit motive questions stay hidden until the 3-out-of-5 loss pattern appears
 - Gift/barter review question for items received in exchange for a post, review, service, or promotion
 - Expense-side promo gift review only when the user appears to be giving a product/sample/gift/giveaway for promotion, content, or business services

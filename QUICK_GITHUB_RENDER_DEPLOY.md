@@ -61,8 +61,8 @@ Use these settings if Render asks:
 
 ```text
 Runtime: Python
-Build Command: python3 -m py_compile server.py
-Start Command: HOST=0.0.0.0 python3 server.py
+Build Command: PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile server.py
+Start Command: PYTHONPYCACHEPREFIX=/tmp HOST=0.0.0.0 python3 server.py
 ```
 
 Add a persistent disk:
@@ -79,6 +79,14 @@ DATA_DIR=/var/data
 APP_USER=tina
 APP_PASSWORD=<choose a strong private password>
 ```
+
+If you are on Render free/no-disk mode for a temporary demo, do not use `/var/data` unless a disk is actually mounted there. Remove `DATA_DIR` or use:
+
+```text
+DATA_DIR=/tmp/tytb-profit-motive-data
+```
+
+Temporary demo storage can reset when Render restarts or redeploys.
 
 Do not enter real client/taxpayer records until `APP_PASSWORD` is set.
 

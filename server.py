@@ -31,8 +31,25 @@ def connect():
     return conn
 
 
+def prepare_data_dir():
+    global DATA, DB_PATH
+    try:
+        DATA.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        fallback = Path("/tmp/tytb-profit-motive-data")
+        print(
+            f"WARNING: DATA_DIR '{DATA}' is not writable. Falling back to temporary storage at '{fallback}'. "
+            "Records saved there may reset when the service restarts. Add a Render persistent disk mounted at "
+            "DATA_DIR for durable storage.",
+            file=sys.stderr,
+        )
+        DATA = fallback
+        DB_PATH = DATA / "tytb_profit_motive.sqlite3"
+        DATA.mkdir(parents=True, exist_ok=True)
+
+
 def init_db():
-    DATA.mkdir(exist_ok=True)
+    prepare_data_dir()
     with connect() as conn:
         conn.executescript(
             """
@@ -127,7 +144,8 @@ def init_db():
                 (key, value),
             )
         ensure_columns(conn)
-        seed_businesses(conn)
+        repair_orphan_entries(conn)
+        normalize_legacy_suggestions(conn)
         for factor_no in range(1, 10):
             conn.execute(
                 """
@@ -155,23 +173,37 @@ def ensure_columns(conn):
             conn.execute(f"ALTER TABLE entries ADD COLUMN {name} {ddl}")
 
 
-def seed_businesses(conn):
+def repair_orphan_entries(conn):
     stamp = now_iso()
-    if conn.execute("SELECT COUNT(*) AS c FROM businesses").fetchone()["c"] == 0:
-        for name, entity_type, description in [
-            ("Tina Your Tax Bestie LLC", "LLC", "Tax education, digital products, and creator education activity"),
-            ("Tina's Tax Resolution", "Tax practice", "Tax resolution and client services activity"),
-            ("YouTube Content Activity", "Creator activity", "Content creation, video production, sponsorships, and platform income"),
-        ]:
-            conn.execute(
-                """
-                INSERT INTO businesses (name, entity_type, description, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (name, entity_type, description, stamp, stamp),
-            )
-    default_id = conn.execute("SELECT id FROM businesses ORDER BY id LIMIT 1").fetchone()["id"]
+    has_orphan_entries = conn.execute("SELECT COUNT(*) AS c FROM entries WHERE business_id IS NULL").fetchone()["c"]
+    if not has_orphan_entries:
+        return
+    row = conn.execute("SELECT id FROM businesses ORDER BY id LIMIT 1").fetchone()
+    if row:
+        default_id = row["id"]
+    else:
+        cursor = conn.execute(
+            """
+            INSERT INTO businesses (name, entity_type, description, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("New Business Activity", "", "Created to hold existing imported records.", stamp, stamp),
+        )
+        default_id = cursor.lastrowid
     conn.execute("UPDATE entries SET business_id = ? WHERE business_id IS NULL", (default_id,))
+
+
+def normalize_legacy_suggestions(conn):
+    conn.execute(
+        """
+        UPDATE businesses
+        SET name = 'Content creator',
+            entity_type = CASE WHEN entity_type IN ('', 'Creator') THEN 'Creator' ELSE entity_type END,
+            updated_at = ?
+        WHERE lower(name) IN ('youtube content creator', 'youtube content activity')
+        """,
+        (now_iso(),),
+    )
 
 
 def sync_business_factors(conn):
@@ -206,27 +238,49 @@ def read_json(handler):
 def normalize_entry(payload):
     record_type = payload.get("record_type") or "cash_expense"
     tax_year = int(payload.get("tax_year") or datetime.now().year)
+    event_date = payload.get("event_date", "").strip()
     amount = float(payload.get("amount_usd") or 0)
     schedule_line = payload.get("schedule_line") or ("income" if "income" in record_type else "27b")
+    category = payload.get("category", "").strip()
+    counterparty = payload.get("counterparty", "").strip()
+    evidence_note = payload.get("evidence_note", "").strip()
+    if not event_date:
+        raise ValueError("Date is required before saving a contemporaneous record.")
+    try:
+        event_year = datetime.strptime(event_date, "%Y-%m-%d").year
+    except ValueError as exc:
+        raise ValueError("Date must be a valid calendar date.") from exc
+    if event_year != tax_year:
+        raise ValueError(f"The record date is in {event_year}, but the selected tax year is {tax_year}. Change the date or the tax year before saving.")
+    if amount <= 0:
+        raise ValueError("Amount must be greater than zero.")
+    if not category:
+        raise ValueError("What was it is required before saving.")
+    if not counterparty:
+        raise ValueError("Payer, payee, provider, or exchange is required before saving.")
+    if not evidence_note:
+        raise ValueError("Business purpose or evidence note is required before saving.")
+    if "income" not in record_type and not payload.get("schedule_line"):
+        raise ValueError("Schedule C organizer line is required for expenses after the item is described.")
     return {
         "business_id": int(payload.get("business_id") or 1),
         "record_type": record_type,
         "tax_year": tax_year,
-        "event_date": payload.get("event_date") or datetime.now().date().isoformat(),
+        "event_date": event_date,
         "amount_usd": amount,
         "allocation_percent": float(payload.get("allocation_percent") or 100),
         "asset_review": payload.get("asset_review", "not_needed").strip() or "not_needed",
         "shared_use_note": payload.get("shared_use_note", "").strip(),
-        "category": payload.get("category", "").strip(),
+        "category": category,
         "description": payload.get("description", "").strip(),
         "schedule_line": schedule_line,
-        "counterparty": payload.get("counterparty", "").strip(),
+        "counterparty": counterparty,
         "fmv_method": payload.get("fmv_method", "").strip(),
         "crypto_asset": payload.get("crypto_asset", "").strip().upper(),
         "crypto_amount": float(payload["crypto_amount"]) if str(payload.get("crypto_amount", "")).strip() else None,
         "crypto_wallet": payload.get("crypto_wallet", "").strip(),
         "transaction_hash": payload.get("transaction_hash", "").strip(),
-        "evidence_note": payload.get("evidence_note", "").strip(),
+        "evidence_note": evidence_note,
         "evidence_file_name": payload.get("evidence_file_name", "").strip(),
         "evidence_file_type": payload.get("evidence_file_type", "").strip(),
         "evidence_file_data": payload.get("evidence_file_data", "").strip(),
@@ -333,8 +387,24 @@ class Handler(SimpleHTTPRequestHandler):
                 )
             return
         if parsed.path == "/api/export.csv":
+            params = parse_qs(parsed.query)
+            filters = []
+            values = []
+            if params.get("tax_year", [""])[0]:
+                filters.append("tax_year = ?")
+                values.append(int(params["tax_year"][0]))
+            if params.get("business_id", [""])[0]:
+                filters.append("business_id = ?")
+                values.append(int(params["business_id"][0]))
+            where = f"WHERE {' AND '.join(filters)}" if filters else ""
             with connect() as conn:
-                rows = [row_to_dict(row) for row in conn.execute("SELECT * FROM entries ORDER BY tax_year DESC, event_date DESC")]
+                rows = [
+                    row_to_dict(row)
+                    for row in conn.execute(
+                        f"SELECT * FROM entries {where} ORDER BY tax_year DESC, event_date DESC",
+                        values,
+                    )
+                ]
             output = io.StringIO()
             fieldnames = [
                 "id", "business_id", "record_type", "tax_year", "event_date", "amount_usd",
@@ -442,6 +512,8 @@ class Handler(SimpleHTTPRequestHandler):
                     self.send_json(row_to_dict(conn.execute("SELECT * FROM businesses WHERE id = ?", (cursor.lastrowid,)).fetchone()), 201)
                 return
             self.send_error_json("Unknown endpoint", 404)
+        except ValueError as exc:
+            self.send_error_json(str(exc), 400)
         except Exception as exc:
             self.send_error_json(str(exc), 500)
 
@@ -538,6 +610,8 @@ class Handler(SimpleHTTPRequestHandler):
                     self.send_json({"ok": True})
                 return
             self.send_error_json("Unknown endpoint", 404)
+        except ValueError as exc:
+            self.send_error_json(str(exc), 400)
         except Exception as exc:
             self.send_error_json(str(exc), 500)
 

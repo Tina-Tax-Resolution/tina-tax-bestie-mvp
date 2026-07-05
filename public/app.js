@@ -64,10 +64,69 @@ const rules = [
   ["30", ["home office", "business use of home"]]
 ];
 
+const businessSuggestions = [
+  { name: "Uber / rideshare driver", type: "Rideshare", words: ["ube", "uber", "rideshare", "ride share", "driver"] },
+  { name: "Lyft / rideshare driver", type: "Rideshare", words: ["lyft", "rideshare"] },
+  { name: "Instacart / delivery shopper", type: "Delivery", words: ["inst", "insta", "instacart", "shopper"] },
+  { name: "DoorDash / delivery driver", type: "Delivery", words: ["door", "dash", "doordash", "delivery"] },
+  { name: "Trucker / owner-operator", type: "Transportation", words: ["tru", "truck", "trucker", "owner operator", "freight"] },
+  { name: "Content creator", type: "Creator", words: ["yt", "youtube", "youtuber", "creator", "content", "contentn", "contn", "content creator", "influencer", "tiktok", "podcast", "podcaster", "streamer"] },
+  { name: "Rapper / music artist", type: "Music artist", words: ["rap", "rapper", "music", "artist", "streaming"] },
+  { name: "Hair stylist / barber", type: "Beauty service", words: ["hair", "barber", "stylist", "beauty"] },
+  { name: "Tax / bookkeeping service", type: "Professional service", words: ["tax", "book", "bookkeeping", "accounting"] },
+  { name: "Freelance creative service", type: "Freelancer", words: ["free", "freelance", "designer", "editor", "writer"] },
+];
+
+const paymentTypeOptions = {
+  cash_income: [
+    ["", "Select remittance type"],
+    ["platform_payout", "Platform payout"],
+    ["client_payment", "Client payment"],
+    ["brand_deal", "Brand deal / sponsorship"],
+    ["affiliate", "Affiliate payout"],
+    ["cash_check", "Cash / check"],
+    ["zelle_venmo", "Zelle / Venmo / Cash App"],
+    ["other_income", "Other income"]
+  ],
+  cash_expense: [
+    ["", "Select payment method"],
+    ["debit_credit", "Debit / credit card"],
+    ["cash", "Cash"],
+    ["bank_transfer", "Bank transfer"],
+    ["zelle_venmo", "Zelle / Venmo / Cash App"],
+    ["platform_fee", "Platform fee"],
+    ["other_expense", "Other expense payment"]
+  ],
+  noncash_income: [
+    ["", "Select non-cash type"],
+    ["brand_product", "Brand product received"],
+    ["barter", "Barter / trade"],
+    ["trip_event", "Trip / event access"],
+    ["service_received", "Service received"],
+    ["other_noncash", "Other non-cash item"]
+  ],
+  crypto_income: [
+    ["", "Select crypto income type"],
+    ["crypto_payment", "Crypto payment received"],
+    ["crypto_sponsorship", "Crypto sponsorship"],
+    ["mining_staking", "Mining / staking / reward"],
+    ["other_crypto_income", "Other crypto income"]
+  ],
+  crypto_expense: [
+    ["", "Select crypto payment type"],
+    ["crypto_paid", "Crypto paid"],
+    ["gas_fee", "Gas/network fee"],
+    ["exchange_fee", "Exchange fee"],
+    ["other_crypto_expense", "Other crypto expense"]
+  ]
+};
+
 let state = { settings: {}, businesses: [], entries: [], factors: [], audit: [] };
 let evidenceFilePayload = { name: "", type: "", data: "" };
 let profitReviewUnlocked = false;
 let portalMode = "client";
+let selectedTaxYearMemory = "";
+let selectedBusinessMemory = "";
 const hobbyTreatmentNote = "If this activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.";
 const fmvEvidenceText = "FMV support: save retail listing, comparable sale, invoice, contract, exchange price, appraised value, or other contemporaneous proof. Educational only; confer with a qualified tax professional.";
 
@@ -89,9 +148,26 @@ function inferLineFrom(type, category, description) {
 
 function updateLineSuggestion(force = false) {
   const inferred = inferLine();
+  const text = `${$("recordCategory").value || ""} ${$("description").value || ""}`.toLowerCase();
+  updateAdvancedCounterpartyLabel();
   if (force || !$("scheduleLine").dataset.manual) $("scheduleLine").value = inferred;
   if (!inferred && !$("recordType").value.includes("income")) {
     $("scheduleHint").textContent = "Type the category or description first; the app will suggest a Schedule C organizer line.";
+    return;
+  }
+  if (!$("recordType").value.includes("income") && inferred === "24b") {
+    const transportationMeal = /truck|trucker|transportation|dot|driver|over the road|otr|hours of service/.test(text);
+    $("scheduleHint").textContent = transportationMeal
+      ? "Suggested: Line 24b - Deductible meals. Transportation worker/DOT meals may have an 80% limit instead of the usual 50%; save trip details and confirm the tax-year rule with a qualified tax professional."
+      : "Suggested: Line 24b - Deductible meals. The app should store the full receipt amount and estimate the deductible portion separately, often 50%. Confirm exceptions with a qualified tax professional.";
+    return;
+  }
+  if (!$("recordType").value.includes("income") && inferred === "9") {
+    $("scheduleHint").textContent = "Suggested: Line 9 - Car and truck expenses. Mileage should use the IRS rate for the selected tax year, or actual expenses if that method applies. Do not include personal commuting miles.";
+    return;
+  }
+  if (!$("recordType").value.includes("income") && inferred === "30") {
+    $("scheduleHint").textContent = "Suggested: Line 30 - Business use of home. Home office can be organized using the simplified square-foot method or the actual expense method. The space usually needs regular and exclusive business use; review with a qualified tax professional.";
     return;
   }
   $("scheduleHint").textContent = $("recordType").value === "noncash_income"
@@ -101,6 +177,26 @@ function updateLineSuggestion(force = false) {
       : `Suggested: ${lineLabel(inferred)}. Change it if your facts are different.`;
 }
 
+function updateAdvancedCounterpartyLabel() {
+  const label = $("counterpartyLabel");
+  const input = $("counterparty");
+  if (!label || !input) return;
+  const type = $("recordType").value;
+  if (type === "cash_expense" || type === "crypto_expense") {
+    label.textContent = "Payee";
+    input.placeholder = "Amazon, studio, contractor, software company, exchange";
+  } else if (type === "noncash_income") {
+    label.textContent = "Provider / brand";
+    input.placeholder = "Brand, sponsor, PR agency, person";
+  } else if (type === "crypto_income") {
+    label.textContent = "Payer / exchange / wallet";
+    input.placeholder = "Brand, client, Coinbase, wallet";
+  } else {
+    label.textContent = "Payer";
+    input.placeholder = "YouTube, TikTok, Meta, brand, client, affiliate network";
+  }
+}
+
 function updateSimpleMappingPreview() {
   const type = $("simpleType").value;
   const what = $("simpleWhat").value.trim();
@@ -108,6 +204,8 @@ function updateSimpleMappingPreview() {
   const line = inferLineFrom(type, what, purpose);
   const words = `${what} ${purpose}`.toLowerCase();
   updateSimpleEntryLabels(type);
+  updatePaymentTypeOptions(type);
+  updateSimplePresetButtons(type);
   const giftContext = updateGiftReviewUI(type, words);
   const giftStatus = $("giftExchangeStatus")?.value || "";
   updateGiftReviewHint(giftContext);
@@ -141,23 +239,82 @@ function updateSimpleMappingPreview() {
   $("simpleSchedulePreview").textContent = `Suggested Schedule C line: ${lineLabel(line || "27b")}. ${reason}${giftGivenNote ? ` ${giftGivenNote}` : ""}`;
 }
 
+function setSimpleType(type) {
+  $("simpleType").value = type;
+  updateSimpleMappingPreview();
+  const nextFocus = $("simpleAmount");
+  if (nextFocus) setTimeout(() => nextFocus.focus(), 20);
+}
+
+function updateSimplePresetButtons(type = $("simpleType")?.value) {
+  document.querySelectorAll("[data-simple-preset]").forEach(button => {
+    button.classList.toggle("active", button.dataset.simplePreset === type);
+  });
+}
+
+function dateMatchesTaxYear(dateValue, taxYear) {
+  if (!dateValue) return { ok: false, message: "Add the date before saving this contemporaneous record." };
+  const year = Number(String(dateValue).slice(0, 4));
+  const selected = Number(taxYear);
+  if (!selected) return { ok: false, message: "Choose the tax year before saving." };
+  if (!year) return { ok: false, message: "Choose a valid date before saving." };
+  if (year !== selected) {
+    return {
+      ok: false,
+      message: `The date is in ${year}, but the selected tax year is ${selected}. Change the date or the tax year before saving.`
+    };
+  }
+  return { ok: true, message: "" };
+}
+
 function updateSimpleEntryLabels(type = $("simpleType").value) {
   const amountLabel = $("simpleAmountLabel");
   const whoLabel = $("simpleWhoLabel");
+  const whatInput = $("simpleWhat");
+  const whoInput = $("simpleWho");
+  const purposeInput = $("simplePurpose");
   if (!amountLabel || !whoLabel) return;
   if (type === "cash_expense" || type === "crypto_expense") {
     amountLabel.textContent = type === "crypto_expense" ? "USD value paid" : "Amount paid";
-    whoLabel.textContent = "Who did you pay?";
+    whoLabel.textContent = "Payee";
+    if (whatInput) whatInput.placeholder = type === "crypto_expense" ? "Gas fee, exchange fee, crypto paid to vendor" : "Studio time, computer, mic, software, ads, contractor";
+    if (whoInput) whoInput.placeholder = "Studio, Amazon, Apple, contractor, software company";
+    if (purposeInput) purposeInput.placeholder = "Short note: what business use was this for?";
   } else if (type === "noncash_income") {
     amountLabel.textContent = "Fair market value";
-    whoLabel.textContent = "Brand / company / person";
+    whoLabel.textContent = "Provider / brand";
+    if (whatInput) whatInput.placeholder = "Brand product, sponsored trip, barter service, gifted equipment";
+    if (whoInput) whoInput.placeholder = "Brand, sponsor, company, person";
+    if (purposeInput) purposeInput.placeholder = "Short note: what post, review, service, or promotion was expected?";
   } else if (type === "crypto_income") {
     amountLabel.textContent = "USD value received";
-    whoLabel.textContent = "Who paid you / exchange";
+    whoLabel.textContent = "Payer / exchange / wallet";
+    if (whatInput) whatInput.placeholder = "USDC sponsorship, crypto payment, token reward";
+    if (whoInput) whoInput.placeholder = "Brand, client, Coinbase, wallet";
+    if (purposeInput) purposeInput.placeholder = "Short note: why did the business receive this crypto?";
   } else {
     amountLabel.textContent = "Amount received";
-    whoLabel.textContent = "Who paid you?";
+    whoLabel.textContent = "Payer";
+    if (whatInput) whatInput.placeholder = "Platform payout, brand deal, client payment, affiliate income, sponsorship";
+    if (whoInput) whoInput.placeholder = "YouTube, TikTok, Meta, brand, client, affiliate network";
+    if (purposeInput) purposeInput.placeholder = "Short note: what content, service, or sale created this income?";
   }
+}
+
+function updatePaymentTypeOptions(type = $("simpleType").value) {
+  const select = $("simplePaymentType");
+  const label = $("simplePaymentLabel");
+  if (!select || !label) return;
+  const current = select.value;
+  const options = paymentTypeOptions[type] || paymentTypeOptions.cash_expense;
+  label.textContent = type.includes("income") ? "Payment / remittance type" : "Payment method / expense type";
+  select.innerHTML = options.map(([value, text]) => `<option value="${value}">${text}</option>`).join("");
+  if (options.some(([value]) => value === current)) select.value = current;
+}
+
+function paymentTypeLabel(type, value) {
+  const found = (paymentTypeOptions[type] || []).find(([optionValue]) => optionValue === value);
+  return found?.[1] || "";
 }
 
 function updateGiftReviewUI(type, words = "") {
@@ -191,9 +348,12 @@ function updateGiftReviewUI(type, words = "") {
       <option value="unsure">Not sure - save for review</option>`;
   } else {
     label.textContent = "Was this gift/product received for a post, review, service, or promotion?";
+    const firstOption = type === "noncash_income"
+      ? `<option value="">Select one</option>`
+      : `<option value="">Not a gift/product entry</option>`;
     select.innerHTML = `
-      <option value="">Not a gift/product entry</option>
-      <option value="yes">Yes - received for services/content</option>
+      ${firstOption}
+      <option value="yes">Yes - received because of content, promotion, review, or services</option>
       <option value="no">No - not received for services/content</option>
       <option value="unsure">Not sure - save for review</option>`;
   }
@@ -241,8 +401,16 @@ async function api(path, options = {}) {
   return response.json();
 }
 
+function errorMessage(error) {
+  return error?.message || "Something went wrong. Please review the entry and try again.";
+}
+
 function activeEntries() {
-  return state.entries.filter(entry => entryMatchesBusiness(entry) && (!$("showDeleted")?.checked ? !entry.deleted_at : true));
+  return state.entries.filter(entry => {
+    const yearMatches = $("showAllYears")?.checked || String(entry.tax_year) === String($("taxYear")?.value);
+    const deleteMatches = !$("showDeleted")?.checked ? !entry.deleted_at : true;
+    return entryMatchesBusiness(entry) && yearMatches && deleteMatches;
+  });
 }
 
 function entriesForYear(year = $("taxYear").value) {
@@ -250,15 +418,30 @@ function entriesForYear(year = $("taxYear").value) {
 }
 
 function selectedBusinessId() {
-  return Number($("businessFilter")?.value || state.businesses[0]?.id || 1);
+  return Number($("businessFilter")?.value || state.businesses[0]?.id || 0);
 }
 
 function entryMatchesBusiness(entry) {
-  return Number(entry.business_id || state.businesses[0]?.id || 1) === selectedBusinessId();
+  const selected = selectedBusinessId();
+  if (!selected) return false;
+  return Number(entry.business_id || 0) === selected;
 }
 
 function businessName(id) {
-  return state.businesses.find(business => Number(business.id) === Number(id))?.name || "Business Activity";
+  return state.businesses.find(business => Number(business.id) === Number(id))?.name || "New Business Activity";
+}
+
+function isPlaceholderBusiness(business) {
+  return /^new business activity$/i.test(String(business?.name || "").trim());
+}
+
+function selectedTaxYearStatus() {
+  if (!$("taxYear")?.value) return "No tax year selected";
+  const current = Number(state.settings.current_tax_year || new Date().getFullYear());
+  const selected = Number($("taxYear")?.value);
+  if (selected === current) return `${selected} Live YTD`;
+  if (selected < current) return `${selected} Prior Year`;
+  return `${selected} Future Year`;
 }
 
 function factorsForBusiness() {
@@ -297,7 +480,8 @@ function yearsWithRecords(rows) {
 }
 
 function recentFiveYearWindow() {
-  const selected = Number($("taxYear").value || new Date().getFullYear());
+  if (!$("taxYear").value) return [];
+  const selected = Number($("taxYear").value);
   const years = [];
   for (let year = selected - 4; year <= selected; year++) years.push(year);
   const results = yearResults();
@@ -308,9 +492,13 @@ function recentFiveYearWindow() {
 }
 
 function profitPath(windowRows) {
+  const currentYear = Number(state.settings.current_tax_year || new Date().getFullYear());
   const recorded = yearsWithRecords(windowRows);
-  const lossRows = recorded.filter(row => row.net < 0);
-  const profitRows = recorded.filter(row => row.net > 0);
+  const completed = recorded.filter(row => Number(row.year) < currentYear);
+  const currentLive = recorded.find(row => Number(row.year) === currentYear);
+  const lossRows = completed.filter(row => row.net < 0);
+  const liveLossRows = recorded.filter(row => row.net < 0);
+  const profitRows = completed.filter(row => row.net > 0);
   const first = recorded[0];
   const last = recorded[recorded.length - 1];
   const incomeImproving = recorded.length >= 2 && last.income > first.income;
@@ -319,7 +507,10 @@ function profitPath(windowRows) {
   const threeLossTrigger = lossRows.length >= 3;
   return {
     recorded,
+    completed,
+    currentLive,
     lossRows,
+    liveLossRows,
     profitRows,
     incomeImproving,
     lossNarrowing,
@@ -338,28 +529,65 @@ function readinessScore() {
 
 function renderTaxYears() {
   const current = Number(state.settings.current_tax_year || new Date().getFullYear());
+  const previous = selectedTaxYearMemory || $("taxYear")?.value || "";
   const years = new Set([...state.entries.map(e => Number(e.tax_year))]);
   for (let year = current - 6; year <= current + 4; year++) years.add(year);
-  $("taxYear").innerHTML = [...years].filter(Boolean).sort((a, b) => b - a).map(year => `<option value="${year}">${year}</option>`).join("");
-  $("taxYear").value = String(current);
-  $("recordTaxYear").value = current;
+  $("taxYear").innerHTML = `<option value="">Select tax year</option>` + [...years].filter(Boolean).sort((a, b) => b - a).map(year => `<option value="${year}">${year}</option>`).join("");
+  $("taxYear").value = [...$("taxYear").options].some(option => option.value === String(previous)) ? String(previous) : "";
+  selectedTaxYearMemory = $("taxYear").value;
+  $("recordTaxYear").value = $("taxYear").value;
 }
 
 function renderBusinessFilter() {
-  const selected = String(selectedBusinessId());
+  const selected = selectedBusinessMemory || String(selectedBusinessId());
   const options = state.businesses
     .filter(business => business.active || String(business.id) === selected)
-    .map(business => `<option value="${business.id}">${escapeHtml(business.name)}</option>`)
+    .map(business => `<option value="${business.id}">${escapeHtml(isPlaceholderBusiness(business) ? "New Business Activity - enter name/type" : business.name)}</option>`)
     .join("");
-  $("businessFilter").innerHTML = options;
-  $("recordBusiness").innerHTML = options;
-  $("simpleBusiness").innerHTML = options;
-  $("businessFilter").value = state.businesses.some(b => String(b.id) === selected) ? selected : String(state.businesses[0]?.id || 1);
+  const emptyOption = `<option value="">Choose business/activity</option>`;
+  const addOption = `<option value="__new__">+ Add new business/activity</option>`;
+  $("businessFilter").innerHTML = emptyOption + addOption + options;
+  $("recordBusiness").innerHTML = emptyOption + options;
+  $("simpleBusiness").innerHTML = emptyOption + options;
+  $("businessFilter").value = state.businesses.some(b => String(b.id) === selected) ? selected : String(state.businesses[0]?.id || "");
   $("recordBusiness").value = $("businessFilter").value;
   $("simpleBusiness").value = $("businessFilter").value;
+  selectedBusinessMemory = $("businessFilter").value;
+  renderBusinessSuggestions();
+  updateBusinessSearchFromSelect();
 }
 
 function renderDashboard() {
+  if (!state.businesses.length) {
+    $("incomeTotal").textContent = money.format(0);
+    $("expenseTotal").textContent = money.format(0);
+    $("netTotal").textContent = money.format(0);
+    $("profitYears").textContent = "0 losses";
+    $("score").textContent = "0%";
+    $("scoreBar").style.width = "0%";
+    $("scoreText").textContent = "Add your first business/activity and records.";
+    $("profitAlert").innerHTML = `<div class="alert"><strong>Start clean:</strong> Add your business/activity, then enter income and expenses as they happen. This creates a live recordkeeping file based on your inputs.</div>`;
+    $("yearChart").innerHTML = `<p class="muted">No records yet.</p>`;
+    $("scheduleSummary").innerHTML = `<p class="muted">No expenses for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
+    renderPortalSnapshot({ income: 0, expenses: 0, net: 0, rows: [] }, profitPath(recentFiveYearWindow()));
+    return;
+  }
+  if (!$("taxYear").value) {
+    const emptyPath = profitPath([]);
+    $("incomeTotal").textContent = money.format(0);
+    $("expenseTotal").textContent = money.format(0);
+    $("netTotal").textContent = money.format(0);
+    $("profitYears").textContent = "Choose year";
+    $("score").textContent = "0%";
+    $("scoreBar").style.width = "0%";
+    $("scoreText").textContent = "Choose a tax year before reviewing income, expenses, or profit motive alerts.";
+    $("profitAlert").innerHTML = `<div class="alert"><strong>Choose tax year:</strong> Select the tax year you want to work on. The app will keep each tax year separate and only run the five-year profit review after a year is selected.</div>`;
+    updateProfitReviewAccess(emptyPath);
+    renderChart(yearResults());
+    renderScheduleSummary([]);
+    renderPortalSnapshot({ income: 0, expenses: 0, net: 0, rows: [] }, emptyPath);
+    return;
+  }
   const t = totals();
   const windowRows = recentFiveYearWindow();
   const path = profitPath(windowRows);
@@ -396,14 +624,15 @@ function renderProfitAlert(rows, path) {
   ].filter(Boolean);
   const trendText = trendBits.length ? ` The current trend shows ${trendBits.join(" and ")}.` : "";
   if (path.threeLossTrigger) {
-    el.innerHTML = `<div class="alert risk"><strong>Bestie Alert:</strong> Your records show losses in ${path.lossRows.length} of the last 5 tax years for ${escapeHtml(businessName(selectedBusinessId()))}. That does not automatically mean it is a hobby, but the IRS may look more closely at whether you are operating with a profit motive.${trendText} If you are treating this as a business, answer the questions below and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Review Profit Motive Factors</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
+    el.innerHTML = `<div class="alert risk"><strong>Bestie Alert:</strong> Your completed-year records show losses in ${path.lossRows.length} of the last 5 tax years for ${escapeHtml(businessName(selectedBusinessId()))}. That does not automatically mean it is a hobby, but the IRS may look more closely at whether you are operating with a profit motive.${trendText} If you are treating this as a business, answer the questions below and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Review Profit Motive Factors</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
     return;
   }
   if (path.profitRows.length >= 3) {
     el.innerHTML = `<div class="alert good"><strong>Profit pattern note:</strong> Your records show ${path.profitRows.length} profitable years in the selected five-year window. This may support a business pattern, but it is not a guarantee. Keep receipts, contracts, FMV proof, and business-purpose notes current.</div>`;
     return;
   }
-  el.innerHTML = `<div class="alert"><strong>Profit Path Note:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year window and ${path.lossRows.length} loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the activity make money."}</div>`;
+  const liveNote = path.currentLive && path.currentLive.net < 0 ? ` Current-year ${path.currentLive.year} is live YTD and is not treated as final until the year closes.` : "";
+  el.innerHTML = `<div class="alert"><strong>Profit Path Note:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year window and ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the activity make money."}${liveNote}</div>`;
 }
 
 function renderChart(rows) {
@@ -460,7 +689,7 @@ function renderPortalSnapshot(t = totals(), path = profitPath(recentFiveYearWind
   el.innerHTML = `
     <div class="portal-summary">
       <div><span>Selected activity</span><strong>${escapeHtml(businessName(selectedBusinessId()))}</strong></div>
-      <div><span>Tax year net</span><strong>${money.format(t.net)}</strong></div>
+      <div><span>${escapeHtml(selectedTaxYearStatus())} net</span><strong>${money.format(t.net)}</strong></div>
       <div><span>Records</span><strong>${counts.total}</strong></div>
       <div><span>Review flags</span><strong>${counts.needsReview}</strong></div>
     </div>
@@ -473,6 +702,11 @@ function renderPortalSnapshot(t = totals(), path = profitPath(recentFiveYearWind
 
 function renderRecords() {
   const rows = activeEntries();
+  if ($("recordsYearLabel")) {
+    $("recordsYearLabel").textContent = $("showAllYears")?.checked
+      ? "Showing all years"
+      : `Showing ${selectedTaxYearStatus()} only`;
+  }
   $("recordsTable").innerHTML = rows.length ? `<table><thead><tr><th>Business</th><th>Year</th><th>Date</th><th>Type</th><th>Amount</th><th>Use %</th><th>Schedule C</th><th>Category</th><th>Evidence</th><th>Actions</th></tr></thead><tbody>${rows.map(entry => `
     <tr class="${entry.deleted_at ? "deleted" : ""}">
       <td>${escapeHtml(businessName(entry.business_id))}</td>
@@ -484,8 +718,8 @@ function renderRecords() {
       <td>${lineLabel(entry.schedule_line)}</td>
       <td>${escapeHtml(entry.category)}<br><span class="muted">${escapeHtml(entry.description)}</span></td>
       <td>${escapeHtml(entry.evidence_note || entry.fmv_method || entry.shared_use_note || "")}${entry.evidence_file_data ? `<br><a href="${entry.evidence_file_data}" target="_blank" rel="noreferrer">View evidence</a>` : ""}</td>
-      <td><div class="row-actions">${entry.deleted_at ? `<button class="small" data-restore="${entry.id}">Restore</button>` : `<button class="small" data-edit="${entry.id}">Edit</button><button class="small" data-delete="${entry.id}">Delete</button>`}</div></td>
-    </tr>`).join("")}</tbody></table>` : `<p class="muted">No records yet.</p>`;
+      <td><div class="row-actions">${entry.deleted_at ? `<button class="small" data-restore="${entry.id}">Restore</button>` : `<button class="small" data-edit="${entry.id}">Edit</button><button class="small icon-button danger" data-delete="${entry.id}" aria-label="Delete record ${entry.id}" title="Delete this record"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg><span class="sr-only">Delete</span></button>`}</div></td>
+    </tr>`).join("")}</tbody></table>` : `<p class="muted">No records for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
 }
 
 function renderBusinesses() {
@@ -497,8 +731,161 @@ function renderBusinesses() {
   </tr>`).join("")}</tbody></table>` : `<p class="muted">No businesses yet.</p>`;
 }
 
+function updateExportLink() {
+  const link = $("exportSelectedYear");
+  if (!link) return;
+  const query = new URLSearchParams();
+  if ($("taxYear")?.value) query.set("tax_year", $("taxYear").value);
+  if ($("businessFilter")?.value) query.set("business_id", $("businessFilter").value);
+  link.href = `/api/export.csv?${query.toString()}`;
+  link.textContent = $("taxYear")?.value ? `Export ${$("taxYear").value} CSV` : "Export CSV";
+}
+
+function findBusinessSuggestion(text) {
+  const query = normalizeBusinessText(text);
+  if (!query) return null;
+  return businessSuggestions.find(suggestion =>
+    normalizeBusinessText(suggestion.name).includes(query) ||
+    query.includes(normalizeBusinessText(suggestion.name)) ||
+    normalizeBusinessText(suggestion.type).includes(query) ||
+    suggestion.words.some(word => normalizeBusinessText(word).includes(query) || query.includes(normalizeBusinessText(word)))
+  ) || null;
+}
+
+function normalizeBusinessText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\bcontentn\b/g, "content")
+    .replace(/\bcontn\b/g, "content")
+    .replace(/\byoutuber\b/g, "youtube")
+    .replace(/\buber\b/g, "ube uber")
+    .replace(/\binsta\b/g, "inst instacart")
+    .trim();
+}
+
+function renderBusinessSuggestions() {
+  const list = $("businessSuggestions");
+  if (!list) return;
+  const existing = state.businesses.map(business => `<option value="${escapeHtml(business.name)}"></option>`);
+  const suggested = businessSuggestions.map(suggestion => `<option value="${escapeHtml(suggestion.name)}"></option>`);
+  list.innerHTML = [...existing, ...suggested].join("");
+}
+
+function updateBusinessSearchFromSelect() {
+  const input = $("simpleBusinessSearch");
+  if (!input) return;
+  input.value = state.businesses.find(business => String(business.id) === String($("simpleBusiness").value))?.name || "";
+  updateBusinessSuggestHint();
+}
+
+function updateBusinessSuggestHint() {
+  const input = $("simpleBusinessSearch");
+  const hint = $("businessSuggestHint");
+  if (!input || !hint) return;
+  const exact = state.businesses.find(business => business.name.toLowerCase() === input.value.trim().toLowerCase());
+  const suggestion = findBusinessSuggestion(input.value);
+  if (exact) {
+    $("simpleBusiness").value = exact.id;
+    hint.textContent = `Using ${exact.name}.`;
+  } else if (suggestion) {
+    hint.textContent = `Suggestion: ${suggestion.name}. Save will create this activity if it is new.`;
+  } else if (input.value.trim()) {
+    hint.textContent = "Save will create this custom business/activity if it is new.";
+  } else {
+    hint.textContent = "Choose or create the activity this record belongs to.";
+  }
+}
+
+function applyBusinessSuggestionToInput(inputId = "simpleBusinessSearch") {
+  const input = $(inputId);
+  if (!input) return;
+  const typed = input.value.trim();
+  const exact = state.businesses.find(business => business.name.toLowerCase() === typed.toLowerCase());
+  const suggestion = findBusinessSuggestion(typed);
+  if (!exact && suggestion) {
+    input.value = suggestion.name;
+    if (inputId === "simpleBusinessSearch") updateBusinessSuggestHint();
+    if (inputId === "businessName") syncBusinessTypeFromName();
+  }
+}
+
+function syncBusinessTypeFromName() {
+  const name = $("businessName").value.trim();
+  const type = $("businessType");
+  if (!name) {
+    if (type.dataset.autoFilled === "true") type.value = "";
+    delete type.dataset.autoFilled;
+    return;
+  }
+  const suggestion = findBusinessSuggestion(name);
+  if (suggestion) {
+    if (!type.value.trim() || type.dataset.autoFilled === "true") {
+      type.value = suggestion.type;
+      type.dataset.autoFilled = "true";
+    }
+    return;
+  }
+  if (type.dataset.autoFilled === "true") type.value = "";
+  delete type.dataset.autoFilled;
+}
+
+async function ensureSimpleBusiness() {
+  const typed = $("simpleBusinessSearch").value.trim();
+  const selectedId = $("simpleBusiness").value;
+  if (selectedId && !typed) return selectedId;
+  const exact = state.businesses.find(business => business.name.toLowerCase() === typed.toLowerCase());
+  if (exact) return exact.id;
+  const suggestion = findBusinessSuggestion(typed);
+  const name = suggestion?.name || typed;
+  if (!name) {
+    toast("Add a business/activity before saving.");
+    $("simpleBusinessSearch").focus();
+    throw new Error("Business/activity required");
+  }
+  const saved = await api("/api/businesses", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      entity_type: suggestion?.type || "",
+      description: suggestion ? `User selected suggested activity from "${typed}".` : "User-created business/activity."
+    })
+  });
+  state.businesses.push(saved);
+  selectedBusinessMemory = String(saved.id);
+  renderBusinessFilter();
+  $("businessFilter").value = String(saved.id);
+  $("simpleBusiness").value = String(saved.id);
+  $("recordBusiness").value = String(saved.id);
+  $("simpleBusinessSearch").value = saved.name;
+  return saved.id;
+}
+
+function parseAuditJson(value) {
+  try {
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function auditSummary(event) {
+  const after = parseAuditJson(event.after_json);
+  const before = parseAuditJson(event.before_json);
+  const row = after || before;
+  if (!row) return "";
+  const parts = [
+    row.tax_year ? `TY ${row.tax_year}` : "",
+    row.record_type ? labelType(row.record_type) : "",
+    row.amount_usd ? money.format(row.amount_usd) : "",
+    row.category || "",
+    row.schedule_line ? lineLabel(row.schedule_line) : "",
+  ].filter(Boolean);
+  return parts.join(" | ");
+}
+
 function renderAudit() {
-  $("auditTable").innerHTML = state.audit.length ? `<table><thead><tr><th>Time</th><th>Action</th><th>Record</th><th>Reason</th></tr></thead><tbody>${state.audit.slice(0, 80).map(event => `<tr><td>${event.created_at}</td><td>${event.action}</td><td>${event.entry_id || ""}</td><td>${escapeHtml(event.reason || "")}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No audit events yet.</p>`;
+  $("auditTable").innerHTML = state.audit.length ? `<table><thead><tr><th>Time</th><th>Action</th><th>Record detail</th><th>Reason</th></tr></thead><tbody>${state.audit.slice(0, 80).map(event => `<tr><td>${event.created_at}</td><td>${event.action}</td><td>#${event.entry_id || ""}<br><span class="muted">${escapeHtml(auditSummary(event))}</span></td><td>${escapeHtml(event.reason || "")}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No recordkeeping history yet.</p>`;
 }
 
 function renderFactors() {
@@ -528,6 +915,21 @@ function renderSettings() {
   $("settingContact").value = state.settings.advisor_contact || "";
   $("settingAccent").value = state.settings.accent_color || "#227c73";
   $("settingDisclaimer").value = state.settings.disclaimer || "";
+}
+
+async function saveProfitReview() {
+  if (!profitReviewUnlocked) {
+    toast("Profit review appears after a 3-out-of-5 loss pattern.");
+    return;
+  }
+  const factors = factorsForBusiness().map(factor => ({
+    factor_no: factor.factor_no,
+    answer: document.querySelector(`[data-factor-answer="${factor.factor_no}"]`).value,
+    note: document.querySelector(`[data-factor-note="${factor.factor_no}"]`).value
+  }));
+  await api("/api/factors", { method: "PUT", body: JSON.stringify({ business_id: selectedBusinessId(), factors }) });
+  await refresh();
+  toast("Profit review saved.");
 }
 
 function renderAll() {
@@ -612,6 +1014,36 @@ async function formPayload() {
   };
 }
 
+function validateAdvancedEntry() {
+  const checks = [
+    [$("recordTaxYear"), "Choose the tax year before saving."],
+    [$("recordDate"), "Add the date before saving."],
+    [$("recordAmount"), "Add the amount before saving."],
+    [$("recordCategory"), "Add what this record was for before saving."],
+    [$("counterparty"), "Add the payer, payee, provider, or exchange before saving."],
+    [$("evidenceNote"), "Add the business purpose or evidence note before saving."]
+  ];
+  for (const [field, message] of checks) {
+    if (!field.value.trim()) {
+      toast(message);
+      field.focus();
+      return false;
+    }
+  }
+  const dateCheck = dateMatchesTaxYear($("recordDate").value, $("recordTaxYear").value);
+  if (!dateCheck.ok) {
+    toast(dateCheck.message);
+    $("recordDate").focus();
+    return false;
+  }
+  if (!$("recordType").value.includes("income") && !$("scheduleLine").value) {
+    toast("Type the category or description so the app can suggest a Schedule C organizer line.");
+    $("recordCategory").focus();
+    return false;
+  }
+  return true;
+}
+
 function editRecord(id) {
   const entry = state.entries.find(row => String(row.id) === String(id));
   if (!entry) return;
@@ -643,6 +1075,7 @@ function editRecord(id) {
   $("evidenceFileHint").textContent = evidenceFilePayload.name ? `Attached: ${evidenceFilePayload.name}` : "Optional receipt, screenshot, contract, or FMV proof.";
   $("editReason").value = "";
   $("scheduleLine").dataset.manual = "true";
+  updateAdvancedCounterpartyLabel();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -650,7 +1083,7 @@ function resetForm() {
   $("recordForm").reset();
   $("formTitle").textContent = "Add Record";
   $("recordId").value = "";
-  $("recordDate").valueAsDate = new Date();
+  $("recordDate").value = "";
   $("recordTaxYear").value = $("taxYear").value;
   $("recordBusiness").value = $("businessFilter").value;
   $("allocationPercent").value = 100;
@@ -660,14 +1093,75 @@ function resetForm() {
   $("evidenceFileHint").textContent = "Optional receipt, screenshot, contract, or FMV proof.";
   delete $("scheduleLine").dataset.manual;
   updateLineSuggestion(true);
+  updateAdvancedCounterpartyLabel();
 }
 
-function resetSimpleForm() {
+function resetSimpleForm(options = {}) {
+  const keepYear = $("taxYear").value;
+  const keepBusiness = $("businessFilter").value;
+  const keepBusinessName = $("simpleBusinessSearch")?.value || "";
+  const keepType = options.keepType ? $("simpleType").value : "cash_income";
   $("simpleEntryForm").reset();
-  $("simpleDate").valueAsDate = new Date();
-  $("simpleBusiness").value = $("businessFilter").value;
+  $("simpleDate").value = "";
+  $("taxYear").value = keepYear;
+  $("recordTaxYear").value = keepYear;
+  $("simpleBusiness").value = keepBusiness;
+  $("simpleBusinessSearch").value = keepBusinessName || state.businesses.find(business => String(business.id) === String(keepBusiness))?.name || "";
+  $("simpleEvidenceHint").textContent = "Optional proof.";
+  $("simpleType").value = keepType;
+  updateSimpleMappingPreview();
+}
+
+function clearSimpleEntryFields() {
+  const keepType = $("simpleType").value;
+  const keepBusinessId = $("simpleBusiness").value;
+  const keepBusinessName = $("simpleBusinessSearch").value;
+  $("simpleEntryForm").reset();
+  $("simpleType").value = keepType;
+  $("simpleBusiness").value = keepBusinessId;
+  $("simpleBusinessSearch").value = keepBusinessName;
+  $("simpleDate").value = "";
   $("simpleEvidenceHint").textContent = "Optional proof.";
   updateSimpleMappingPreview();
+  toast("Entry cleared. Tax year, business, and entry type stayed selected.");
+}
+
+function validateSimpleEntry() {
+  const type = $("simpleType").value;
+  const required = [
+    [$("taxYear"), "Choose the tax year before saving."],
+    [$("simpleDate"), "Add the date before saving this contemporaneous record."],
+    [$("simpleAmount"), "Add the amount before saving."],
+    [$("simplePaymentType"), type.includes("income") ? "Choose the payment or remittance type before saving." : "Choose the payment method or expense type before saving."],
+    [$("simpleWhat"), type.includes("income") ? "Add what kind of income this was before saving." : "Add what you paid for before saving."],
+    [$("simpleWho"), type.includes("income") ? "Add the payer, provider, or exchange before saving." : "Add the payee before saving."],
+    [$("simplePurpose"), "Add a short note before saving."]
+  ];
+  for (const [field, message] of required) {
+    if (!field.value.trim()) {
+      toast(message);
+      field.focus();
+      return false;
+    }
+  }
+  const dateCheck = dateMatchesTaxYear($("simpleDate").value, $("taxYear").value);
+  if (!dateCheck.ok) {
+    toast(dateCheck.message);
+    $("simpleDate").focus();
+    return false;
+  }
+  const giftContext = updateGiftReviewUI(type, `${$("simpleWhat").value} ${$("simplePurpose").value}`.toLowerCase());
+  if (type === "noncash_income" && giftContext.direction === "received" && !$("giftExchangeStatus").value) {
+    toast("Answer whether the gift/barter was received because of content, promotion, review, or services.");
+    $("giftExchangeStatus").focus();
+    return false;
+  }
+  if (!type.includes("income") && !inferLineFrom(type, $("simpleWhat").value, $("simplePurpose").value)) {
+    toast("Tell us what this expense was for before saving so it does not default to Other.");
+    $("simpleWhat").focus();
+    return false;
+  }
+  return true;
 }
 
 function editBusinessRecord(id) {
@@ -677,6 +1171,7 @@ function editBusinessRecord(id) {
   $("businessId").value = business.id;
   $("businessName").value = business.name;
   $("businessType").value = business.entity_type || "";
+  delete $("businessType").dataset.autoFilled;
   $("businessDescription").value = business.description || "";
   $("businessActive").checked = Boolean(business.active);
   document.querySelector('[data-view="businesses"]').click();
@@ -686,17 +1181,23 @@ function resetBusinessForm() {
   $("businessFormTitle").textContent = "Add Business / Activity";
   $("businessForm").reset();
   $("businessId").value = "";
+  delete $("businessType").dataset.autoFilled;
   $("businessActive").checked = true;
+  document.querySelector('[data-view="businesses"]').click();
+  setTimeout(() => $("businessName").focus(), 30);
 }
 
 async function refresh() {
+  selectedTaxYearMemory = selectedTaxYearMemory || $("taxYear")?.value || "";
+  selectedBusinessMemory = selectedBusinessMemory || $("businessFilter")?.value || "";
   state = await api("/api/bootstrap");
   renderTaxYears();
   renderLineOptions();
   renderBusinessFilter();
   resetForm();
-  resetSimpleForm();
+  resetSimpleForm({ keepType: true });
   renderAll();
+  updateExportLink();
 }
 
 function renderLineOptions() {
@@ -744,6 +1245,23 @@ document.querySelectorAll(".nav").forEach(button => {
   $(id).addEventListener("blur", updateSimpleMappingPreview);
 });
 $("giftExchangeStatus").addEventListener("change", updateSimpleMappingPreview);
+$("simpleBusinessSearch").addEventListener("input", updateBusinessSuggestHint);
+$("simpleBusinessSearch").addEventListener("change", () => applyBusinessSuggestionToInput("simpleBusinessSearch"));
+$("simpleBusinessSearch").addEventListener("blur", () => applyBusinessSuggestionToInput("simpleBusinessSearch"));
+$("businessName").addEventListener("input", syncBusinessTypeFromName);
+$("businessName").addEventListener("change", () => applyBusinessSuggestionToInput("businessName"));
+$("businessName").addEventListener("blur", () => applyBusinessSuggestionToInput("businessName"));
+$("businessType").addEventListener("input", () => {
+  delete $("businessType").dataset.autoFilled;
+});
+$("simpleBusiness").addEventListener("change", () => {
+  updateBusinessSearchFromSelect();
+  selectedBusinessMemory = $("simpleBusiness").value;
+});
+
+document.querySelectorAll("[data-simple-preset]").forEach(button => {
+  button.addEventListener("click", () => setSimpleType(button.dataset.simplePreset));
+});
 
 $("scheduleLine").addEventListener("change", () => {
   $("scheduleLine").dataset.manual = "true";
@@ -764,6 +1282,7 @@ $("openAdvancedForm").addEventListener("click", () => {
   $("recordForm").classList.toggle("advanced-hidden");
   $("openAdvancedForm").textContent = $("recordForm").classList.contains("advanced-hidden") ? "Use Advanced Fields" : "Hide Advanced Fields";
 });
+$("clearSimpleForm").addEventListener("click", clearSimpleEntryFields);
 
 document.querySelectorAll("[data-allocation]").forEach(button => {
   button.addEventListener("click", () => {
@@ -775,9 +1294,7 @@ document.querySelectorAll("[data-quick-type]").forEach(button => {
   button.addEventListener("click", () => {
     document.querySelector('[data-view="records"]').click();
     resetSimpleForm();
-    $("simpleType").value = button.dataset.quickType;
-    updateSimpleMappingPreview();
-    setTimeout(() => $("simpleAmount").focus(), 50);
+    setSimpleType(button.dataset.quickType);
   });
 });
 
@@ -796,41 +1313,71 @@ $("addRecordBtn").addEventListener("click", () => {
 });
 
 $("taxYear").addEventListener("change", () => {
+  selectedTaxYearMemory = $("taxYear").value;
   $("recordTaxYear").value = $("taxYear").value;
+  updateExportLink();
   renderDashboard();
+  renderRecords();
+  renderFactors();
 });
 
 $("businessFilter").addEventListener("change", () => {
+  if ($("businessFilter").value === "__new__") {
+    selectedBusinessMemory = "";
+    $("businessFilter").value = "";
+    resetBusinessForm();
+    toast("Enter the business/activity name and type.");
+    return;
+  }
+  const selectedBusiness = state.businesses.find(business => String(business.id) === $("businessFilter").value);
+  if (isPlaceholderBusiness(selectedBusiness)) {
+    selectedBusinessMemory = $("businessFilter").value;
+    editBusinessRecord(selectedBusiness.id);
+    toast("Replace New Business Activity with the real business/activity name and type.");
+    return;
+  }
+  selectedBusinessMemory = $("businessFilter").value;
   $("recordBusiness").value = $("businessFilter").value;
+  $("simpleBusiness").value = $("businessFilter").value;
+  updateBusinessSearchFromSelect();
+  updateExportLink();
   renderDashboard();
   renderRecords();
   renderFactors();
 });
 
 $("showDeleted").addEventListener("change", renderRecords);
+$("showAllYears").addEventListener("change", renderRecords);
 $("resetForm").addEventListener("click", resetForm);
 
 $("recordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!validateAdvancedEntry()) return;
   const id = $("recordId").value;
   if (id && !$("editReason").value.trim()) {
     toast("Add a reason for the edit.");
     return;
   }
-  const payload = await formPayload();
-  if (id) await api(`/api/entries/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-  else await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
-  await refresh();
-  toast(id ? "Record edited and recordkeeping history updated." : "Record saved.");
+  try {
+    const payload = await formPayload();
+    if (id) await api(`/api/entries/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+    else await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
+    await refresh();
+    toast(id ? "Record edited and recordkeeping history updated." : "Record saved.");
+  } catch (error) {
+    toast(errorMessage(error));
+  }
 });
 
 $("simpleEntryForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!validateSimpleEntry()) return;
   const type = $("simpleType").value;
   const category = $("simpleWhat").value.trim();
   const description = $("simplePurpose").value.trim();
   const giftContext = updateGiftReviewUI(type, `${category} ${description}`.toLowerCase());
   const giftStatus = $("giftExchangeStatus").value;
+  const paymentText = paymentTypeLabel(type, $("simplePaymentType").value);
   const giftStatusText = giftContext.direction === "given" ? {
     yes: "Promo gift/giveaway question: Yes, item was given for business promotion/content/services.",
     no: "Promo gift/giveaway question: No, ordinary expense only.",
@@ -845,34 +1392,52 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
   const fmvMethod = type === "noncash_income" || type.includes("crypto") || giftStatus === "yes" || giftStatus === "unsure"
     ? `${fmvEvidenceText} ${giftStatusText}`.trim()
     : "";
-  const payload = {
-    business_id: $("simpleBusiness").value,
-    record_type: type,
-    tax_year: $("taxYear").value,
-    event_date: $("simpleDate").value,
-    amount_usd: $("simpleAmount").value,
-    allocation_percent: 100,
-    asset_review: giftStatus === "unsure" ? "review_needed" : needsAssetReview ? "possible_depreciation" : "not_needed",
-    shared_use_note: "",
-    category,
-    description,
-    schedule_line: inferLineFrom(type, category, description),
-    counterparty: $("simpleWho").value,
-    fmv_method: fmvMethod,
-    crypto_asset: "",
-    crypto_amount: "",
-    crypto_wallet: "",
-    transaction_hash: "",
-    evidence_note: [description, giftStatusText].filter(Boolean).join(" "),
-    evidence_file_name: file.name,
-    evidence_file_type: file.type,
-    evidence_file_data: file.data,
-    source: "simple_entry",
-    reason: "Simple entry"
-  };
-  await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
-  await refresh();
-  toast("Saved simple entry.");
+  try {
+    const keepType = type;
+    const keepYear = $("taxYear").value;
+    const businessId = await ensureSimpleBusiness();
+    const payload = {
+      business_id: businessId,
+      record_type: type,
+      tax_year: $("taxYear").value,
+      event_date: $("simpleDate").value,
+      amount_usd: $("simpleAmount").value,
+      allocation_percent: 100,
+      asset_review: giftStatus === "unsure" ? "review_needed" : needsAssetReview ? "possible_depreciation" : "not_needed",
+      shared_use_note: "",
+      category,
+      description,
+      schedule_line: inferLineFrom(type, category, description),
+      counterparty: $("simpleWho").value,
+      fmv_method: fmvMethod,
+      crypto_asset: "",
+      crypto_amount: "",
+      crypto_wallet: "",
+      transaction_hash: "",
+      evidence_note: [description, paymentText ? `Payment/remittance type: ${paymentText}.` : "", giftStatusText].filter(Boolean).join(" "),
+      evidence_file_name: file.name,
+      evidence_file_type: file.type,
+      evidence_file_data: file.data,
+      source: "simple_entry",
+      reason: "Simple entry"
+    };
+    await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
+    await refresh();
+    $("taxYear").value = keepYear;
+    $("recordTaxYear").value = keepYear;
+    $("simpleType").value = keepType;
+    $("simpleBusiness").value = String(businessId);
+    $("businessFilter").value = String(businessId);
+    updateBusinessSearchFromSelect();
+    clearSimpleEntryFields();
+    renderDashboard();
+    renderRecords();
+    renderFactors();
+    updateExportLink();
+    toast("Saved. Add another record when ready.");
+  } catch (error) {
+    toast(errorMessage(error));
+  }
 });
 
 document.body.addEventListener("click", async (event) => {
@@ -897,9 +1462,7 @@ document.body.addEventListener("click", async (event) => {
     }
     document.querySelector('[data-view="records"]').click();
     resetSimpleForm();
-    $("simpleType").value = portalAction === "cash_expense" || portalAction === "cash_income" || portalAction === "noncash_income" ? portalAction : "cash_expense";
-    updateSimpleMappingPreview();
-    setTimeout(() => $("simpleAmount").focus(), 50);
+    setSimpleType(portalAction === "cash_expense" || portalAction === "cash_income" || portalAction === "noncash_income" ? portalAction : "cash_expense");
     return;
   }
   if (startReview) {
@@ -924,28 +1487,28 @@ document.body.addEventListener("click", async (event) => {
   }
 });
 
-$("saveFactors").addEventListener("click", async () => {
-  if (!profitReviewUnlocked) {
-    toast("Profit review appears after a 3-out-of-5 loss pattern.");
-    return;
-  }
-  const factors = factorsForBusiness().map(factor => ({
-    factor_no: factor.factor_no,
-    answer: document.querySelector(`[data-factor-answer="${factor.factor_no}"]`).value,
-    note: document.querySelector(`[data-factor-note="${factor.factor_no}"]`).value
-  }));
-  await api("/api/factors", { method: "PUT", body: JSON.stringify({ business_id: selectedBusinessId(), factors }) });
-  await refresh();
-  toast("Section 183 factors saved.");
-});
+$("saveFactors").addEventListener("click", saveProfitReview);
+$("saveFactorsBottom").addEventListener("click", saveProfitReview);
 
 $("businessForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  applyBusinessSuggestionToInput("businessName");
+  const suggestion = findBusinessSuggestion($("businessName").value);
+  if (!$("businessName").value.trim()) {
+    toast("Enter the business/activity name before saving.");
+    $("businessName").focus();
+    return;
+  }
+  if (!$("businessType").value.trim() && !suggestion?.type) {
+    toast("Enter the type of business/activity before saving.");
+    $("businessType").focus();
+    return;
+  }
   const id = $("businessId").value;
   const payload = {
     name: $("businessName").value,
-    entity_type: $("businessType").value,
-    description: $("businessDescription").value,
+    entity_type: $("businessType").value || suggestion?.type || "",
+    description: $("businessDescription").value || (suggestion ? `User selected suggested activity.` : ""),
     active: $("businessActive").checked
   };
   if (id) await api(`/api/businesses/${id}`, { method: "PUT", body: JSON.stringify(payload) });
@@ -965,7 +1528,7 @@ $("saveSettings").addEventListener("click", async () => {
       advisor_contact: $("settingContact").value,
       accent_color: $("settingAccent").value,
       disclaimer: $("settingDisclaimer").value,
-      current_tax_year: $("taxYear").value
+      current_tax_year: $("taxYear").value || state.settings.current_tax_year || new Date().getFullYear()
     })
   });
   await refresh();
@@ -977,54 +1540,6 @@ $("importBtn").addEventListener("click", async () => {
   $("csvImport").value = "";
   await refresh();
   toast("CSV imported.");
-});
-
-$("seedBtn").addEventListener("click", async () => {
-  const year = Number($("taxYear").value || new Date().getFullYear());
-  const findBusiness = (text) => state.businesses.find(business => business.name.toLowerCase().includes(text))?.id;
-  const ensureDemoBusiness = async (name, entity_type, description) => {
-    const found = state.businesses.find(business => business.name.toLowerCase() === name.toLowerCase());
-    if (found) return found.id;
-    const saved = await api("/api/businesses", { method: "POST", body: JSON.stringify({ name, entity_type, description }) });
-    state.businesses.push(saved);
-    return saved.id;
-  };
-  const youtube = findBusiness("youtube") || await ensureDemoBusiness("YouTube Content Activity", "Creator activity", "Content creation, sponsorships, platform income, brand gifts, and creator equipment.");
-  const rapper = await ensureDemoBusiness("Rap Artist Activity", "Music artist", "Streaming royalties, shows, merch, studio work, licensing, and music content.");
-  const demo = [
-    [rapper, "cash_income", year - 4, `${year - 4}-01-15`, 9000, 100, "not_needed", "", "Streaming and shows", "Streaming royalties, features, and local show income", "income", "Music platforms / venues", "", "", "", "", "", "Demo: profitable rapper year"],
-    [rapper, "cash_expense", year - 4, `${year - 4}-02-15`, 5200, 100, "not_needed", "", "Studio time", "Recording studio rental", "20b", "Recording studio", "", "", "", "", "", "Studio time maps to rent/lease other business property"],
-    [rapper, "cash_income", year - 3, `${year - 3}-01-15`, 12500, 100, "not_needed", "", "Music income", "Streaming, merch, and paid performance income", "income", "Music platforms / venues", "", "", "", "", "", "Demo: income increasing"],
-    [rapper, "cash_expense", year - 3, `${year - 3}-02-15`, 6400, 100, "not_needed", "", "Promotion", "Single release advertising campaign", "8", "Ad platform", "", "", "", "", "", "Business purpose: promote new music"],
-    [rapper, "cash_income", year - 2, `${year - 2}-01-15`, 18800, 100, "not_needed", "", "Music income", "Streaming, merch, licensing, and show income", "income", "Music platforms / venues", "", "", "", "", "", "Demo: profitable music activity"],
-    [rapper, "cash_expense", year - 2, `${year - 2}-02-15`, 8300, 100, "not_needed", "", "Contract labor", "Producer, engineer, and graphic designer", "11", "Contractors", "", "", "", "", "", "Contractor records should be reviewed before filing"],
-    [youtube, "cash_income", year - 4, `${year - 4}-01-15`, 700, 100, "not_needed", "", "YouTube AdSense", "Early creator revenue", "income", "YouTube", "", "", "", "", "", "Demo: startup creator income"],
-    [youtube, "cash_expense", year - 4, `${year - 4}-02-18`, 4200, 100, "possible_depreciation", "", "Camera and mic", "Creator equipment for filming", "13", "Electronics store", "", "", "", "", "", "Startup equipment review"],
-    [youtube, "cash_income", year - 3, `${year - 3}-01-15`, 1500, 100, "not_needed", "", "Affiliate income", "Affiliate and platform income increased", "income", "Affiliate platform", "", "", "", "", "", "Demo: income improving but still loss"],
-    [youtube, "cash_expense", year - 3, `${year - 3}-02-18`, 3900, 100, "not_needed", "", "Studio time", "Studio time for filming creator content", "20b", "Studio", "", "", "", "", "", "Studio time maps to Line 20b"],
-    [youtube, "noncash_income", year - 2, `${year - 2}-02-03`, 600, 100, "review_needed", "", "Brand gift", "Camera accessory package received for a review post", "income", "Brand partner", "Retail product page screenshot saved. Gift/product question: Yes, received for services/content.", "", "", "", "", "FMV support needed before tax filing"],
-    [youtube, "cash_income", year - 2, `${year - 2}-03-15`, 2800, 100, "not_needed", "", "Sponsorship", "Cash sponsorship for creator campaign", "income", "Brand partner", "", "", "", "", "", "Demo: income improving"],
-    [youtube, "cash_expense", year - 2, `${year - 2}-04-04`, 4300, 100, "not_needed", "", "Software and editing", "Video editing software and contractor support", "18", "Software / editor", "", "", "", "", "", "Demo: third loss year triggers review"],
-    [youtube, "cash_income", year - 1, `${year - 1}-01-15`, 6200, 100, "not_needed", "", "Creator income", "AdSense, affiliate, and sponsorship income", "income", "Platforms / brands", "", "", "", "", "", "Demo: income growing"],
-    [youtube, "cash_expense", year - 1, `${year - 1}-04-04`, 5600, 100, "not_needed", "", "Operating expenses", "Editing, subscriptions, and production support", "18", "Vendors", "", "", "", "", "", "Demo: first profitable creator year"],
-    [youtube, "cash_income", year, `${year}-01-15`, 8900, 100, "not_needed", "", "Creator income", "AdSense, affiliate, sponsorship, and product sales", "income", "Platforms / brands", "", "", "", "", "", "Demo: still growing"],
-    [youtube, "crypto_income", year, `${year}-03-10`, 1250, 100, "review_needed", "", "Crypto sponsorship", "Paid in USDC for content campaign", "income", "Web3 brand", "Exchange USD value at receipt", "USDC", 1250, "Coinbase", "0x-demo", "Transaction hash and screenshot attached later"],
-    [youtube, "cash_expense", year, `${year}-04-04`, 7800, 100, "possible_depreciation", "", "Computer", "Computer used for video editing and content production", "13", "Electronics store", "", "", "", "", "", "Demo: business still close to break-even with asset review"]
-  ];
-  for (const row of demo) {
-    await api("/api/entries", {
-      method: "POST",
-      body: JSON.stringify({
-        business_id: row[0], record_type: row[1], tax_year: row[2], event_date: row[3], amount_usd: row[4],
-        allocation_percent: row[5], asset_review: row[6], shared_use_note: row[7],
-        category: row[8], description: row[9], schedule_line: row[10], counterparty: row[11],
-        fmv_method: row[12], crypto_asset: row[13], crypto_amount: row[14], crypto_wallet: row[15],
-        transaction_hash: row[16], evidence_note: row[17], reason: "Demo seed"
-      })
-    });
-  }
-  await refresh();
-  toast("Demo records loaded.");
 });
 
 refresh().catch(error => {

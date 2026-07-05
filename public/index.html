@@ -10,7 +10,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="/styles.css?v=14">
+  <link rel="stylesheet" href="/styles.css?v=28">
 </head>
 <body>
   <div class="app">
@@ -43,8 +43,7 @@
           <label class="compact">Business<select id="businessFilter"></select></label>
           <label class="compact">Tax Year<select id="taxYear"></select></label>
           <button class="primary" id="addRecordBtn">Add Record</button>
-          <a class="button ghost" href="/api/export.csv">Export CSV</a>
-          <button class="primary" id="seedBtn">Load Demo</button>
+          <a class="button ghost" id="exportSelectedYear" href="/api/export.csv">Export Year CSV</a>
         </div>
       </header>
 
@@ -118,8 +117,8 @@
             </div>
             <form id="businessForm" class="form-grid">
               <input type="hidden" id="businessId">
-              <label class="span-6">Name<input id="businessName" placeholder="YouTube Content Activity"></label>
-              <label class="span-6">Type<input id="businessType" placeholder="LLC, tax practice, creator activity"></label>
+              <label class="span-6">Business / Activity Name<input id="businessName" list="businessSuggestions" required placeholder="Content creator, rideshare driver, delivery shopper"></label>
+              <label class="span-6">Business Type<input id="businessType" required placeholder="Creator, rideshare, delivery, tax practice, LLC"></label>
               <label class="span-12">Description<textarea id="businessDescription" placeholder="What this business/activity does and how it earns income"></textarea></label>
               <label class="span-12 compact"><input type="checkbox" id="businessActive" checked> Active</label>
               <div class="span-12 actions">
@@ -144,10 +143,35 @@
           <article class="panel span-12 simple-entry">
             <div class="section-title">
               <h3>Simple Entry</h3>
-              <p class="muted">Use this first. The app will map the tax category in the background.</p>
+              <p class="muted">Choose what you are adding. You can switch before saving.</p>
             </div>
             <form id="simpleEntryForm" class="simple-form">
-              <label>What are you adding?
+              <div class="span-12 entry-choice" aria-label="Choose entry type">
+                <button class="entry-card income" type="button" data-simple-preset="cash_income">
+                  <span>Money In</span>
+                  <strong>Income</strong>
+                  <small>YouTube payout, client payment, brand deal, affiliate income</small>
+                </button>
+                <button class="entry-card expense active" type="button" data-simple-preset="cash_expense">
+                  <span>Money Out</span>
+                  <strong>Expense</strong>
+                  <small>Studio time, computer, mic, software, ads, contractor</small>
+                </button>
+                <button class="entry-card gift" type="button" data-simple-preset="noncash_income">
+                  <span>Non-Cash</span>
+                  <strong>Gift / Barter</strong>
+                  <small>Product, trip, service, or item received for content or work</small>
+                </button>
+                <button class="entry-card crypto" type="button" data-simple-preset="crypto_income">
+                  <span>Digital Asset</span>
+                  <strong>Crypto</strong>
+                  <small>Crypto received or paid; switch to expense below if needed</small>
+                </button>
+              </div>
+              <div class="span-12 entry-more">
+                <button type="button" data-simple-preset="crypto_expense">Crypto Paid / Business Expense</button>
+              </div>
+              <label class="simple-type-field">Entry type
                 <select id="simpleType" onchange="updateSimpleMappingPreview()">
                   <option value="cash_expense">Expense I paid - money went out</option>
                   <option value="cash_income">Income / payout I received - money came in</option>
@@ -156,11 +180,19 @@
                   <option value="crypto_expense">Crypto expense paid</option>
                 </select>
               </label>
-              <label>Business / Activity<select id="simpleBusiness"></select></label>
+              <label class="span-6">Business / Activity
+                <input id="simpleBusinessSearch" list="businessSuggestions" placeholder="Start typing: content creator, ube, inst, tru, tax">
+                <datalist id="businessSuggestions"></datalist>
+                <select id="simpleBusiness"></select>
+                <span class="helper" id="businessSuggestHint">Choose or create the activity this record belongs to.</span>
+              </label>
               <label>Date<input id="simpleDate" type="date" required></label>
               <label><span id="simpleAmountLabel">Amount paid</span><input id="simpleAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" required></label>
-              <label class="span-6">What was it?<input id="simpleWhat" oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="Studio time, computer, mic, YouTube payout, brand gift"><span class="helper mapping-preview empty" id="simpleSchedulePreview">Type the expense or income item to see the mapping.</span></label>
-              <label class="span-6"><span id="simpleWhoLabel">Who did you pay?</span><input id="simpleWho" placeholder="Store, studio, client, brand, platform, exchange"></label>
+              <label><span id="simplePaymentLabel">Payment type</span>
+                <select id="simplePaymentType"></select>
+              </label>
+              <label class="span-6">What was it? <input id="simpleWhat" required oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="Platform payout, brand deal, client payment, affiliate income"><span class="helper mapping-preview empty" id="simpleSchedulePreview">Type the income, expense, gift, barter, or crypto item to see the mapping.</span></label>
+              <label class="span-6"><span id="simpleWhoLabel">Payer</span><input id="simpleWho" required placeholder="YouTube, TikTok, Meta, brand, client, affiliate network"></label>
               <label class="span-6 gift-review-field field-hidden" id="giftReviewField"><span id="giftReviewLabel">Gift / product review</span>
                 <select id="giftExchangeStatus" onchange="updateSimpleMappingPreview()"></select>
                 <span class="helper" id="giftReviewHint">The app will ask only when a gift, barter, product, giveaway, or promo item is relevant.</span>
@@ -168,10 +200,11 @@
               <div class="span-12 fmv-help field-hidden" id="fmvHelp">
                 <strong>FMV evidence helper:</strong> For products, trips, barter, prizes, crypto, or brand items, save how you found the dollar value at the time received or paid. Useful proof can include a retail page screenshot, comparable sale, invoice, contract, exchange price, or qualified appraisal. IRS references: <a href="https://www.irs.gov/publications/p561" target="_blank" rel="noreferrer">Pub. 561 FMV principles</a> and <a href="https://www.irs.gov/publications/p525#en_US_2025_publink1000229556" target="_blank" rel="noreferrer">Pub. 525 barter income</a>. Educational only; confer with a qualified tax professional.
               </div>
-              <label class="span-6">Business purpose / note<textarea id="simplePurpose" oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="Why this belongs to this business activity"></textarea></label>
+              <label class="span-6">Short note<textarea id="simplePurpose" required oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="What content, service, or sale created this income?"></textarea></label>
               <label class="span-6">Receipt / Screenshot / Proof<input id="simpleEvidenceFile" type="file" accept="image/*,.pdf" capture="environment"><span class="helper" id="simpleEvidenceHint">Optional proof.</span></label>
               <div class="span-12 actions form-actions">
                 <button class="primary" type="submit">Save Simple Entry</button>
+                <button type="button" class="ghost" id="clearSimpleForm">Clear Entry</button>
                 <button type="button" class="ghost" id="openAdvancedForm">Use Advanced Fields</button>
               </div>
             </form>
@@ -198,7 +231,7 @@
               <label>Date<input id="recordDate" type="date" required></label>
               <label>USD Amount / FMV <button class="info" data-tip="FMV means fair market value: the estimated dollar value at the time received. If a product, trip, crypto, or other item is received in exchange for content, promotion, services, reviews, or brand work, it may need to be tracked as income at FMV. Consult a qualified tax professional.">i</button><input id="recordAmount" type="number" step="0.01" min="0" required></label>
               <div class="field-block">
-                <div class="field-label">Business Use % <button type="button" class="info" data-tip="Use this when an item supports more than one business/activity. Keep notes explaining the allocation. Ask a qualified tax professional before relying on an allocation for filing.">i</button></div>
+                <div class="field-label">Business Use % <button type="button" class="info" data-tip="Use this when an item is partly business and partly personal, or shared between activities. Example: a camera used 80% for content and 20% personal. Educational only; consult a qualified tax professional.">i</button></div>
                 <div class="percent-control">
                   <input id="allocationPercent" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="100" aria-label="Business use percentage">
                   <span>%</span>
@@ -209,7 +242,11 @@
                   <button type="button" data-allocation="50">50%</button>
                   <button type="button" data-allocation="25">25%</button>
                 </div>
-                <span class="helper">Tap a percent or type your own business-use amount.</span>
+                <span class="helper">Use 100% only when the item is only for this business. Use a lower percent for mixed-use items like a phone, computer, camera, car, internet, or home office.</span>
+                <div class="mini-help">
+                  <strong>Common percentage rules:</strong>
+                  <span>Meals are often limited to 50%. Certain DOT/transportation worker meals may use 80%. Home office can use simplified square-foot method or actual expense method. Vehicle expenses may use standard mileage or actual expenses. Rates and limits can change by tax year. Educational only.</span>
+                </div>
               </div>
               <label>Asset Review<select id="assetReview">
                 <option value="not_needed">Not needed</option>
@@ -219,7 +256,7 @@
               </select></label>
               <label>Category<input id="recordCategory" placeholder="Studio time, AdSense, brand gift"></label>
               <label>Schedule C Line<select id="scheduleLine"></select><span id="scheduleHint" class="helper"></span></label>
-              <label>Counterparty<input id="counterparty" placeholder="Client, brand, platform, exchange"></label>
+              <label><span id="counterpartyLabel">Payer / Payee / Provider</span><input id="counterparty" placeholder="YouTube, brand, client, Amazon, studio, exchange"></label>
               <label>Description<input id="description" placeholder="What happened?"></label>
               <label class="span-6">FMV Method<input id="fmvMethod" placeholder="Retail page screenshot, contract, invoice, exchange price"></label>
               <label>Crypto Asset<input id="cryptoAsset" placeholder="BTC, ETH, USDC"></label>
@@ -239,7 +276,11 @@
           <article class="panel span-12">
             <div class="section-title">
               <h3>Records</h3>
-              <label class="compact"><input type="checkbox" id="showDeleted"> Show deleted</label>
+              <div class="record-toggles">
+                <span class="chip" id="recordsYearLabel">Showing selected year</span>
+                <label class="compact"><input type="checkbox" id="showAllYears"> Show all years</label>
+                <label class="compact"><input type="checkbox" id="showDeleted"> Show deleted</label>
+              </div>
             </div>
             <div class="table-wrap" id="recordsTable"></div>
           </article>
@@ -263,6 +304,10 @@
             <strong>Hobby treatment note:</strong> If you and your tax professional determine the activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.
           </div>
           <div id="factorList"></div>
+          <div class="actions form-actions factor-save-bottom">
+            <button class="primary" id="saveFactorsBottom">Save Profit Review</button>
+            <span class="muted">Saves your answers and notes to this business/activity. Educational record organization only.</span>
+          </div>
         </article>
       </section>
 
@@ -304,6 +349,6 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="/app.js?v=14"></script>
+  <script src="/app.js?v=28"></script>
 </body>
 </html>
