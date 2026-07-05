@@ -932,12 +932,37 @@ function renderFactorSummary(factors = factorsForBusiness()) {
   const el = $("factorSummary");
   if (!el) return;
   const counts = factorAnswerCounts(factors);
+  const yesFactors = factors
+    .filter(factor => factor.answer === "yes")
+    .map(factor => factorText[Number(factor.factor_no) - 1]?.[0])
+    .filter(Boolean);
+  const needsWorkFactors = factors
+    .filter(factor => factor.answer === "no" || factor.answer === "mixed")
+    .map(factor => factorText[Number(factor.factor_no) - 1]?.[0])
+    .filter(Boolean);
   const strength = counts.yes >= 6 && counts.notes >= 4
     ? "Strong record support"
     : counts.yes >= 4 || counts.notes >= 3
       ? "Developing record support"
       : "Needs more documentation";
-  el.innerHTML = `<div class="alert ${counts.yes >= 6 ? "good" : ""}"><strong>Profit Review Snapshot:</strong> ${strength}. Answers marked Yes: ${counts.yes}; Mixed: ${counts.mixed}; No: ${counts.no}; notes added: ${counts.notes}. This is an educational record organizer, not a tax determination. Save receipts, platform reports, contracts, FMV support, and business changes, then review with a qualified tax professional.</div>`;
+  const className = counts.yes >= 6 ? "good" : counts.no >= 4 ? "risk" : "";
+  const supportingText = yesFactors.length
+    ? `Your answers currently show support in: ${yesFactors.slice(0, 4).join(", ")}${yesFactors.length > 4 ? ", and more" : ""}.`
+    : "Your answers do not yet show clear support in any factor.";
+  const workText = needsWorkFactors.length
+    ? `Areas to document or discuss with a qualified tax professional: ${needsWorkFactors.slice(0, 5).join(", ")}${needsWorkFactors.length > 5 ? ", and more" : ""}.`
+    : "No factor is marked Mixed or No right now; keep the records and evidence current.";
+  const noteText = counts.notes < 3
+    ? "Add short evidence notes where possible. Notes can mention receipts, calendars, platform reports, contracts, advisor input, business changes, or why losses occurred."
+    : "You added notes to several factors, which helps organize the story behind the records.";
+  el.innerHTML = `<div class="alert ${className}">
+    <strong>Profit Review Snapshot:</strong> ${strength}.
+    <p>Yes: ${counts.yes}; Mixed: ${counts.mixed}; No: ${counts.no}; notes added: ${counts.notes}.</p>
+    <p>${escapeHtml(supportingText)}</p>
+    <p>${escapeHtml(workText)}</p>
+    <p>${escapeHtml(noteText)}</p>
+    <p class="muted">Educational record organization only. This does not decide whether the activity is a business or hobby, and no single factor controls. The IRS looks at all facts and circumstances. Confer with a qualified tax professional before filing or taking a tax position.</p>
+  </div>`;
 }
 
 function renderSettings() {
