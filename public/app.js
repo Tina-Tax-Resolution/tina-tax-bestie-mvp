@@ -568,7 +568,7 @@ function renderDashboard() {
     $("profitAlert").innerHTML = `<div class="alert"><strong>Start clean:</strong> Add your business/activity, then enter income and expenses as they happen. This creates a live recordkeeping file based on your inputs.</div>`;
     $("yearChart").innerHTML = `<p class="muted">No records yet.</p>`;
     renderProfitLossTable([]);
-    $("scheduleSummary").innerHTML = `<p class="muted">No expenses for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
+    if ($("scheduleSummary")) $("scheduleSummary").innerHTML = `<p class="muted">No expenses for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
     renderPortalSnapshot({ income: 0, expenses: 0, net: 0, rows: [] }, profitPath(recentFiveYearWindow()));
     return;
   }
@@ -667,6 +667,7 @@ function renderProfitLossTable(rows) {
 }
 
 function renderScheduleSummary(rows) {
+  if (!$("scheduleSummary")) return;
   const grouped = {};
   rows.filter(e => !isIncome(e)).forEach(entry => {
     grouped[entry.schedule_line] = (grouped[entry.schedule_line] || 0) + Number(entry.amount_usd || 0);
@@ -1282,9 +1283,9 @@ document.querySelectorAll(".nav").forEach(button => {
     button.classList.add("active");
     $(button.dataset.view).classList.add("active");
     const labels = {
-      dashboard: ["Dashboard", "Track income, expenses, FMV, crypto, and business-purpose evidence."],
+      dashboard: ["Dashboard", "See real-time profit or loss for the selected tax year."],
       businesses: ["Businesses", "Separate each business/activity so records and profit-motive analysis stay clean."],
-      records: ["Records", "Create, edit, soft-delete, restore, and preserve change history."],
+      records: ["Records", "Capture income, outlays, receipts, proof, gifts/barter, crypto, and edit history."],
       factors: ["Profit Review", "Answer the profit motive factors after a 3-out-of-5 loss pattern appears."],
       imports: ["Batch Import", "Bring in rows from platforms, wallets, banks, or spreadsheets."],
       settings: ["White Label", "Customize the app for Tina Your Tax Bestie LLC or another partner."]

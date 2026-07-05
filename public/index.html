@@ -10,7 +10,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="/styles.css?v=30">
+  <link rel="stylesheet" href="/styles.css?v=31">
 </head>
 <body>
   <div class="app">
@@ -37,7 +37,7 @@
       <header>
         <div>
           <h2 id="viewTitle">Dashboard</h2>
-          <p id="viewSub">Track income, expenses, FMV, crypto, and business-purpose evidence.</p>
+          <p id="viewSub">See real-time profit or loss for the selected tax year.</p>
         </div>
         <div class="actions">
           <label class="compact">Business<select id="businessFilter"></select></label>
@@ -52,12 +52,12 @@
         <div class="grid">
           <article class="panel span-12 quick-panel">
             <div class="section-title">
-              <h3>Quick Add</h3>
-              <p class="muted">Fast entry for real-time records while you are buying gear, logging income, or capturing FMV evidence.</p>
+              <h3>Capture Records</h3>
+              <p class="muted">Use this to capture income, outlays, receipts, gifts/barter, crypto, and proof. The tax-year dashboard below shows profit or loss in real time from what you enter.</p>
             </div>
             <div class="quick-actions">
               <button class="primary" data-quick-type="cash_income">Add Income</button>
-              <button data-quick-type="cash_expense">Add Expense</button>
+              <button data-quick-type="cash_expense">Add Expense / Outlay</button>
               <button data-quick-type="noncash_income">Add Gift / Barter</button>
               <button data-quick-type="crypto_income">Add Crypto</button>
             </div>
@@ -67,15 +67,6 @@
               <h3>Use On Your Phone</h3>
               <p class="muted">This is ready to install after hosting. Open the secure web link on your phone, then choose Add to Home Screen. The local preview works on this computer only.</p>
             </div>
-          </article>
-          <article class="panel span-12 portal-panel">
-            <div class="section-title">
-              <div>
-                <h3>Tax Pro Review Packet</h3>
-                <p class="muted">A quick snapshot of records, review flags, evidence gaps, export, and profit motive readiness for this activity.</p>
-              </div>
-            </div>
-            <div id="portalSnapshot"></div>
           </article>
           <article class="metric"><span>Income</span><strong id="incomeTotal">$0</strong></article>
           <article class="metric warn"><span>Expenses</span><strong id="expenseTotal">$0</strong></article>
@@ -96,12 +87,6 @@
             <div class="gauge"><div id="scoreBar"></div></div>
             <div class="score" id="score">0%</div>
             <p class="muted" id="scoreText">Answer the Section 183 questions and add records.</p>
-          </article>
-          <article class="panel span-12">
-            <div class="section-title">
-              <h3>Schedule C Summary <button class="info" data-tip="Schedule C is commonly used by sole proprietors to report business income and expenses. Line mapping is an organizer aid only. Review with a tax professional.">i</button></h3>
-            </div>
-            <div id="scheduleSummary"></div>
           </article>
         </div>
       </section>
@@ -348,6 +333,6 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="/app.js?v=30"></script>
+  <script src="/app.js?v=31"></script>
 </body>
 </html>
