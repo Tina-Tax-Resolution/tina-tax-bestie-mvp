@@ -10,7 +10,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="/styles.css?v=28">
+  <link rel="stylesheet" href="/styles.css?v=29">
 </head>
 <body>
   <div class="app">
@@ -44,6 +44,7 @@
           <label class="compact">Tax Year<select id="taxYear"></select></label>
           <button class="primary" id="addRecordBtn">Add Record</button>
           <a class="button ghost" id="exportSelectedYear" href="/api/export.csv">Export Year CSV</a>
+          <button class="ghost danger" id="resetWalkthroughBtn" type="button">Reset Walkthrough</button>
         </div>
       </header>
 
@@ -70,12 +71,8 @@
           <article class="panel span-12 portal-panel">
             <div class="section-title">
               <div>
-                <h3>Client Portal</h3>
-                <p class="muted">A simpler front door for creators, freelancers, and clients. Tax pros can switch to review mode for the record packet.</p>
-              </div>
-              <div class="segmented" role="group" aria-label="Portal mode">
-                <button class="active" data-portal-mode="client" type="button">Client</button>
-                <button data-portal-mode="pro" type="button">Tax Pro</button>
+                <h3>Tax Pro Review Packet</h3>
+                <p class="muted">A quick snapshot of records, review flags, evidence gaps, export, and profit motive readiness for this activity.</p>
               </div>
             </div>
             <div id="portalSnapshot"></div>
@@ -90,6 +87,7 @@
             </div>
             <div id="profitAlert"></div>
             <div class="chart" id="yearChart"></div>
+            <div class="table-wrap" id="profitLossTable"></div>
           </article>
           <article class="panel span-4">
             <div class="section-title">
@@ -303,6 +301,7 @@
           <div class="alert risk">
             <strong>Hobby treatment note:</strong> If you and your tax professional determine the activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.
           </div>
+          <div id="factorSummary"></div>
           <div id="factorList"></div>
           <div class="actions form-actions factor-save-bottom">
             <button class="primary" id="saveFactorsBottom">Save Profit Review</button>
@@ -349,6 +348,6 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="/app.js?v=28"></script>
+  <script src="/app.js?v=29"></script>
 </body>
 </html>

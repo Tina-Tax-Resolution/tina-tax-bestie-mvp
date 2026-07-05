@@ -511,6 +511,27 @@ class Handler(SimpleHTTPRequestHandler):
                     sync_business_factors(conn)
                     self.send_json(row_to_dict(conn.execute("SELECT * FROM businesses WHERE id = ?", (cursor.lastrowid,)).fetchone()), 201)
                 return
+            if parsed.path == "/api/reset":
+                payload = read_json(self)
+                if payload.get("confirm") != "RESET":
+                    self.send_error_json("Type RESET to clear the walkthrough data.", 400)
+                    return
+                with connect() as conn:
+                    conn.execute("DELETE FROM audit_events")
+                    conn.execute("DELETE FROM business_factor_answers")
+                    conn.execute("DELETE FROM factor_answers")
+                    conn.execute("DELETE FROM entries")
+                    conn.execute("DELETE FROM businesses")
+                    for factor_no in range(1, 10):
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO factor_answers (factor_no, answer, note, updated_at)
+                            VALUES (?, 'mixed', '', ?)
+                            """,
+                            (factor_no, now_iso()),
+                        )
+                self.send_json({"ok": True, "message": "Walkthrough data cleared."})
+                return
             self.send_error_json("Unknown endpoint", 404)
         except ValueError as exc:
             self.send_error_json(str(exc), 400)

@@ -435,6 +435,8 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.45; }
 .bar { min-height: 4px; border-radius: 7px 7px 0 0; background: var(--accent); }
 .bar.loss { background: var(--rose); }
 .bar-label { text-align: center; color: var(--muted); font-size: 11px; }
+.profit-text { color: #2f7d4d; }
+.loss-text { color: var(--rose); }
 .alert {
   border: 1px solid var(--line);
   border-left: 5px solid var(--gold);

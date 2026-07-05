@@ -124,7 +124,6 @@ const paymentTypeOptions = {
 let state = { settings: {}, businesses: [], entries: [], factors: [], audit: [] };
 let evidenceFilePayload = { name: "", type: "", data: "" };
 let profitReviewUnlocked = false;
-let portalMode = "client";
 let selectedTaxYearMemory = "";
 let selectedBusinessMemory = "";
 const hobbyTreatmentNote = "If this activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.";
@@ -568,6 +567,7 @@ function renderDashboard() {
     $("scoreText").textContent = "Add your first business/activity and records.";
     $("profitAlert").innerHTML = `<div class="alert"><strong>Start clean:</strong> Add your business/activity, then enter income and expenses as they happen. This creates a live recordkeeping file based on your inputs.</div>`;
     $("yearChart").innerHTML = `<p class="muted">No records yet.</p>`;
+    renderProfitLossTable([]);
     $("scheduleSummary").innerHTML = `<p class="muted">No expenses for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
     renderPortalSnapshot({ income: 0, expenses: 0, net: 0, rows: [] }, profitPath(recentFiveYearWindow()));
     return;
@@ -584,6 +584,7 @@ function renderDashboard() {
     $("profitAlert").innerHTML = `<div class="alert"><strong>Choose tax year:</strong> Select the tax year you want to work on. The app will keep each tax year separate and only run the five-year profit review after a year is selected.</div>`;
     updateProfitReviewAccess(emptyPath);
     renderChart(yearResults());
+    renderProfitLossTable(yearResults());
     renderScheduleSummary([]);
     renderPortalSnapshot({ income: 0, expenses: 0, net: 0, rows: [] }, emptyPath);
     return;
@@ -602,6 +603,7 @@ function renderDashboard() {
   renderProfitAlert(windowRows, path);
   updateProfitReviewAccess(path);
   renderChart(yearResults());
+  renderProfitLossTable(windowRows);
   renderScheduleSummary(t.rows);
   renderPortalSnapshot(t, path);
 }
@@ -648,6 +650,22 @@ function renderChart(rows) {
   }).join("");
 }
 
+function renderProfitLossTable(rows) {
+  const el = $("profitLossTable");
+  if (!el) return;
+  if (!rows.length) {
+    el.innerHTML = `<p class="muted">No yearly profit/loss records yet.</p>`;
+    return;
+  }
+  el.innerHTML = `<table><thead><tr><th>Tax Year</th><th>Income</th><th>Expenses</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${rows.map(row => {
+    const net = Number(row.net || 0);
+    const hasRecords = Number(row.income || 0) > 0 || Number(row.expenses || 0) > 0;
+    const current = Number(state.settings.current_tax_year || new Date().getFullYear());
+    const status = !hasRecords ? "No records" : Number(row.year) === current ? "Live YTD" : net < 0 ? "Loss year" : net > 0 ? "Profit year" : "Break even";
+    return `<tr><td>${row.year}</td><td>${money.format(row.income || 0)}</td><td>${money.format(row.expenses || 0)}</td><td><strong class="${net < 0 ? "loss-text" : "profit-text"}">${money.format(net)}</strong></td><td><span class="chip ${net < 0 ? "risk" : net > 0 ? "good" : ""}">${status}</span></td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+
 function renderScheduleSummary(rows) {
   const grouped = {};
   rows.filter(e => !isIncome(e)).forEach(entry => {
@@ -674,13 +692,7 @@ function renderPortalSnapshot(t = totals(), path = profitPath(recentFiveYearWind
   const el = $("portalSnapshot");
   if (!el) return;
   const counts = reviewCounts();
-  const modeClient = portalMode === "client";
-  const rows = modeClient ? [
-    ["Add money received", "Record YouTube payouts, client payments, sponsorships, affiliate income, crypto, and platform deposits.", "Add Income", "cash_income"],
-    ["Add money spent", "Record gear, studio time, software, contractors, ads, travel, and other business costs.", "Add Expense", "cash_expense"],
-    ["Add brand gift or barter", "Track products, trips, services, or items received for posts, reviews, services, or promotions at FMV.", "Add Gift / Barter", "noncash_income"],
-    ["Upload proof", "Attach receipts, screenshots, contracts, platform reports, FMV proof, and business-purpose notes.", "Add Proof", "cash_expense"],
-  ] : [
+  const rows = [
     ["Review packet", `${counts.total} active records, ${counts.needsReview} tax-pro review flags, ${counts.fmv} FMV/crypto/gift items.`, "Open Records", "records"],
     ["Profit path", `${path.lossRows.length} loss year(s) in the five-year window. ${path.incomeImproving ? "Income is improving. " : ""}${path.lossNarrowing ? "Losses are narrowing." : ""}`, "Open Profit Review", "factors"],
     ["Evidence gaps", `${counts.missingEvidence} record(s) need stronger notes or proof before filing review.`, "Open Records", "records"],
@@ -696,7 +708,7 @@ function renderPortalSnapshot(t = totals(), path = profitPath(recentFiveYearWind
     <div class="portal-cards">${rows.map(row => `<div class="portal-card">
       <h4>${escapeHtml(row[0])}</h4>
       <p>${escapeHtml(row[1])}</p>
-      <button class="small ${modeClient ? "primary" : ""}" data-portal-action="${escapeHtml(row[3])}">${escapeHtml(row[2])}</button>
+      <button class="small" data-portal-action="${escapeHtml(row[3])}">${escapeHtml(row[2])}</button>
     </div>`).join("")}</div>`;
 }
 
@@ -890,10 +902,12 @@ function renderAudit() {
 
 function renderFactors() {
   if (!profitReviewUnlocked) {
+    if ($("factorSummary")) $("factorSummary").innerHTML = "";
     $("factorList").innerHTML = `<div class="alert"><strong>Profit Motive Review locked for now:</strong> The full questions appear after the app detects losses in 3 of the last 5 tax years for this business/activity. Keep adding income, expenses, gifts/barter, crypto, and evidence so the app can watch the profit path.</div>`;
     return;
   }
   const factors = factorsForBusiness();
+  renderFactorSummary(factors);
   $("factorList").innerHTML = factors.map((factor, index) => `<div class="factor">
     <div class="num">${factor.factor_no}</div>
     <div><h4>${factorText[index][0]} <button class="info" data-tip="${escapeHtml(factorText[index][1])}">i</button></h4><p class="muted">${factorText[index][1]}</p></div>
@@ -904,6 +918,26 @@ function renderFactors() {
     </select>
     <textarea data-factor-note="${factor.factor_no}" placeholder="Evidence notes, documents, business changes, advisor input">${escapeHtml(factor.note || "")}</textarea>
   </div>`).join("");
+}
+
+function factorAnswerCounts(factors = factorsForBusiness()) {
+  return factors.reduce((counts, factor) => {
+    counts[factor.answer] = (counts[factor.answer] || 0) + 1;
+    if (factor.note?.trim()) counts.notes += 1;
+    return counts;
+  }, { yes: 0, mixed: 0, no: 0, notes: 0 });
+}
+
+function renderFactorSummary(factors = factorsForBusiness()) {
+  const el = $("factorSummary");
+  if (!el) return;
+  const counts = factorAnswerCounts(factors);
+  const strength = counts.yes >= 6 && counts.notes >= 4
+    ? "Strong record support"
+    : counts.yes >= 4 || counts.notes >= 3
+      ? "Developing record support"
+      : "Needs more documentation";
+  el.innerHTML = `<div class="alert ${counts.yes >= 6 ? "good" : ""}"><strong>Profit Review Snapshot:</strong> ${strength}. Answers marked Yes: ${counts.yes}; Mixed: ${counts.mixed}; No: ${counts.no}; notes added: ${counts.notes}. This is an educational record organizer, not a tax determination. Save receipts, platform reports, contracts, FMV support, and business changes, then review with a qualified tax professional.</div>`;
 }
 
 function renderSettings() {
@@ -929,7 +963,9 @@ async function saveProfitReview() {
   }));
   await api("/api/factors", { method: "PUT", body: JSON.stringify({ business_id: selectedBusinessId(), factors }) });
   await refresh();
-  toast("Profit review saved.");
+  document.querySelector('[data-view="factors"]').click();
+  renderFactorSummary(factors);
+  toast("Profit review saved. Snapshot updated.");
 }
 
 function renderAll() {
@@ -1298,13 +1334,20 @@ document.querySelectorAll("[data-quick-type]").forEach(button => {
   });
 });
 
-document.querySelectorAll("[data-portal-mode]").forEach(button => {
-  button.addEventListener("click", () => {
-    portalMode = button.dataset.portalMode;
-    document.querySelectorAll("[data-portal-mode]").forEach(item => item.classList.toggle("active", item === button));
-    renderDashboard();
+if ($("resetWalkthroughBtn")) {
+  $("resetWalkthroughBtn").addEventListener("click", async () => {
+    const confirmText = prompt("This clears businesses, records, profit review answers, and recordkeeping history for a fresh walkthrough. Type RESET to continue.");
+    if (confirmText !== "RESET") {
+      toast("Reset canceled.");
+      return;
+    }
+    await api("/api/reset", { method: "POST", body: JSON.stringify({ confirm: "RESET" }) });
+    selectedBusinessMemory = "";
+    selectedTaxYearMemory = "";
+    await refresh();
+    toast("Walkthrough data cleared.");
   });
-});
+}
 
 $("addRecordBtn").addEventListener("click", () => {
   document.querySelector('[data-view="records"]').click();
