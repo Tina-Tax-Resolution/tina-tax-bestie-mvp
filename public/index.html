@@ -10,9 +10,31 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="/styles.css?v=31">
+  <link rel="stylesheet" href="/styles.css?v=47">
 </head>
-<body>
+<body data-view="dashboard" class="landing-active">
+  <section class="landing" id="landingPage" aria-label="Tax Bestie landing page">
+    <div class="landing-bg" aria-hidden="true"></div>
+    <div class="landing-content">
+      <div class="landing-brand">
+        <div class="logo" aria-hidden="true">TY</div>
+        <span>Tina Your Tax Bestie LLC</span>
+      </div>
+      <h1>Let Tax Bestie Mind Your Business</h1>
+      <p>Contemporaneous recordkeeping for self-employed creators and small business owners: track income, expenses, products, gifts, and profit/loss by tax year while Tax Bestie watches for Section 183 profit motive concerns.</p>
+      <div class="landing-actions">
+        <button class="primary" id="enterApp" type="button">Start Tracking</button>
+        <button class="ghost light" id="previewApp" type="button">Preview Year Review</button>
+      </div>
+      <div class="landing-points">
+        <span>Real-time records</span>
+        <span>Schedule C organizer mapping</span>
+        <span>Section 183 3-out-of-5 watch</span>
+        <span>9-question profit motive review</span>
+      </div>
+      <p class="landing-disclaimer">Educational and record-organization purposes only. Not legal, tax, accounting, or Circular 230 written tax advice. The app does not decide whether an activity is a business or hobby and does not determine deductibility. Consult a qualified tax professional before filing or taking any tax position.</p>
+    </div>
+  </section>
   <div class="app">
     <aside>
       <div class="brand">
@@ -23,12 +45,10 @@
         </div>
       </div>
       <nav>
-        <button class="nav active" data-view="dashboard">Dashboard</button>
-        <button class="nav" data-view="businesses">Businesses</button>
-        <button class="nav" data-view="records">Records</button>
-        <button class="nav" data-view="factors">Profit Review</button>
-        <button class="nav" data-view="imports">Batch Import</button>
-        <button class="nav" data-view="settings">White Label</button>
+        <button class="nav active" data-view="dashboard">Home</button>
+        <button class="nav" data-view="records">Year Review</button>
+        <button class="nav" data-view="factors">Profit Alert</button>
+        <button class="nav" data-view="imports">More</button>
       </nav>
       <div class="notice" id="sideDisclaimer"></div>
     </aside>
@@ -36,30 +56,28 @@
     <main>
       <header>
         <div>
-          <h2 id="viewTitle">Dashboard</h2>
-          <p id="viewSub">See real-time profit or loss for the selected tax year.</p>
+          <h2 id="viewTitle">Home</h2>
+          <p id="viewSub">Choose the business and tax year, then add records as money moves.</p>
         </div>
         <div class="actions">
           <label class="compact">Business<select id="businessFilter"></select></label>
           <label class="compact">Tax Year<select id="taxYear"></select></label>
-          <button class="primary" id="addRecordBtn">Add Record</button>
+          <button class="primary" id="addRecordBtn">Add Money / Expense / Product</button>
           <a class="button ghost" id="exportSelectedYear" href="/api/export.csv">Export Year CSV</a>
-          <button class="ghost danger" id="resetWalkthroughBtn" type="button">Reset Walkthrough</button>
         </div>
       </header>
 
       <section class="view active" id="dashboard">
         <div class="grid">
-          <article class="panel span-12 quick-panel">
+          <article class="panel span-12 dashboard-intro">
             <div class="section-title">
-              <h3>Capture Records</h3>
-              <p class="muted">Use this to capture income, outlays, receipts, gifts/barter, crypto, and proof. The tax-year dashboard below shows profit or loss in real time from what you enter.</p>
+              <h3>Start Here</h3>
+              <p class="muted">Choose the business/activity and tax year. Then add income, expenses, or products/gifts as they happen. Tax Bestie organizes records, maps expense categories for Schedule C review, and watches completed-year losses for Section 183 education.</p>
             </div>
-            <div class="quick-actions">
-              <button class="primary" data-quick-type="cash_income">Add Income</button>
-              <button data-quick-type="cash_expense">Add Expense / Outlay</button>
-              <button data-quick-type="noncash_income">Add Gift / Barter</button>
-              <button data-quick-type="crypto_income">Add Crypto</button>
+            <div class="dashboard-steps">
+              <div><strong>1</strong><span>Select business and tax year at the top.</span></div>
+              <div><strong>2</strong><span>Tap Add Money / Expense / Product.</span></div>
+              <div><strong>3</strong><span>Review profit or loss for the year.</span></div>
             </div>
           </article>
           <article class="panel span-12 install-panel">
@@ -82,11 +100,11 @@
           </article>
           <article class="panel span-4">
             <div class="section-title">
-              <h3>Record Strength <button class="info" data-tip="Educational score based on your records, evidence notes, profit trend, and any profit motive review answers. It is not tax advice and does not determine your filing position.">i</button></h3>
+              <h3>Documentation Completeness <button class="info" data-tip="Educational score based on whether records have dates, amounts, payer/payee details, descriptions, mapping, notes, and supporting files. It measures record completeness only; it does not decide whether a deduction is allowed.">i</button></h3>
             </div>
             <div class="gauge"><div id="scoreBar"></div></div>
             <div class="score" id="score">0%</div>
-            <p class="muted" id="scoreText">Answer the Section 183 questions and add records.</p>
+            <p class="muted" id="scoreText">Add records and supporting details.</p>
           </article>
         </div>
       </section>
@@ -121,46 +139,43 @@
         </div>
       </section>
 
-      <section class="view" id="records">
+      <section class="view" id="capture">
         <div class="grid">
+          <article class="panel span-12 capture-setup">
+            <div class="section-title">
+              <h3>Step 1: Choose The File</h3>
+              <p class="muted">This uses the business/activity and tax year selected at the top of the screen. You should not need to pick the tax year twice.</p>
+            </div>
+            <div id="taxYearRangeHelp" class="tax-year-range">Choose a tax year to see the January 1 through December 31 record period.</div>
+          </article>
           <article class="panel span-12 simple-entry">
             <div class="section-title">
-              <h3>Simple Entry</h3>
-              <p class="muted">Choose what you are adding. You can switch before saving.</p>
+              <h3>Step 2: Capture A Record</h3>
+              <p class="muted">Save money received, money spent, or a product/gift/barter item. Add another item or complete the tax-year review after saving.</p>
             </div>
             <form id="simpleEntryForm" class="simple-form">
               <div class="span-12 entry-choice" aria-label="Choose entry type">
                 <button class="entry-card income" type="button" data-simple-preset="cash_income">
                   <span>Money In</span>
-                  <strong>Income</strong>
-                  <small>YouTube payout, client payment, brand deal, affiliate income</small>
+                  <strong>Money I received</strong>
+                  <small>Cash, check, platform payout, brand deal, crypto, product/gift/barter</small>
                 </button>
                 <button class="entry-card expense active" type="button" data-simple-preset="cash_expense">
                   <span>Money Out</span>
-                  <strong>Expense</strong>
+                  <strong>Money I spent</strong>
                   <small>Studio time, computer, mic, software, ads, contractor</small>
                 </button>
                 <button class="entry-card gift" type="button" data-simple-preset="noncash_income">
                   <span>Non-Cash</span>
-                  <strong>Gift / Barter</strong>
+                  <strong>Product / gift / barter</strong>
                   <small>Product, trip, service, or item received for content or work</small>
                 </button>
-                <button class="entry-card crypto" type="button" data-simple-preset="crypto_income">
-                  <span>Digital Asset</span>
-                  <strong>Crypto</strong>
-                  <small>Crypto received or paid; switch to expense below if needed</small>
-                </button>
-              </div>
-              <div class="span-12 entry-more">
-                <button type="button" data-simple-preset="crypto_expense">Crypto Paid / Business Expense</button>
               </div>
               <label class="simple-type-field">Entry type
                 <select id="simpleType" onchange="updateSimpleMappingPreview()">
                   <option value="cash_expense">Expense I paid - money went out</option>
                   <option value="cash_income">Income / payout I received - money came in</option>
                   <option value="noncash_income">Gift / Barter / Product received for services</option>
-                  <option value="crypto_income">Crypto income received</option>
-                  <option value="crypto_expense">Crypto expense paid</option>
                 </select>
               </label>
               <label class="span-6">Business / Activity
@@ -170,12 +185,21 @@
                 <span class="helper" id="businessSuggestHint">Choose or create the activity this record belongs to.</span>
               </label>
               <label>Date<input id="simpleDate" type="date" required></label>
-              <label><span id="simpleAmountLabel">Amount paid</span><input id="simpleAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" required></label>
+              <label><span id="simpleAmountLabel">Amount paid</span><input id="simpleAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" required></label>
               <label><span id="simplePaymentLabel">Payment type</span>
                 <select id="simplePaymentType"></select>
               </label>
-              <label class="span-6">What was it? <input id="simpleWhat" required oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="Platform payout, brand deal, client payment, affiliate income"><span class="helper mapping-preview empty" id="simpleSchedulePreview">Type the income, expense, gift, barter, or crypto item to see the mapping.</span></label>
-              <label class="span-6"><span id="simpleWhoLabel">Payer</span><input id="simpleWho" required placeholder="YouTube, TikTok, Meta, brand, client, affiliate network"></label>
+              <label class="span-6 field-hidden" id="cryptoBusinessField"><span>Was this crypto received for this business?</span>
+                <select id="cryptoBusinessStatus">
+                  <option value="">Select one</option>
+                  <option value="yes">Yes - business payment for services/content/sponsorship/tip</option>
+                  <option value="no">No - personal or investment crypto</option>
+                  <option value="unsure">Not sure - ask a qualified tax professional</option>
+                </select>
+                <span class="helper">Only business crypto payments are included in this app's profit/loss. Personal or investment crypto is not saved here.</span>
+              </label>
+              <label class="span-6" id="simpleWhatField"><span id="simpleWhatLabel">What was it?</span> <input id="simpleWhat" oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="Studio time, computer, mic, software, ads, contractor"><span class="helper mapping-preview empty" id="simpleSchedulePreview">Optional: type the expense you paid to see the Schedule C mapping.</span></label>
+              <label class="span-6" id="simpleWhoField"><span id="simpleWhoLabel">Payer</span><input id="simpleWho" placeholder="Optional"></label>
               <label class="span-6 gift-review-field field-hidden" id="giftReviewField"><span id="giftReviewLabel">Gift / product review</span>
                 <select id="giftExchangeStatus" onchange="updateSimpleMappingPreview()"></select>
                 <span class="helper" id="giftReviewHint">The app will ask only when a gift, barter, product, giveaway, or promo item is relevant.</span>
@@ -183,14 +207,22 @@
               <div class="span-12 fmv-help field-hidden" id="fmvHelp">
                 <strong>FMV evidence helper:</strong> For products, trips, barter, prizes, crypto, or brand items, save how you found the dollar value at the time received or paid. Useful proof can include a retail page screenshot, comparable sale, invoice, contract, exchange price, or qualified appraisal. IRS references: <a href="https://www.irs.gov/publications/p561" target="_blank" rel="noreferrer">Pub. 561 FMV principles</a> and <a href="https://www.irs.gov/publications/p525#en_US_2025_publink1000229556" target="_blank" rel="noreferrer">Pub. 525 barter income</a>. Educational only; confer with a qualified tax professional.
               </div>
-              <label class="span-6">Short note<textarea id="simplePurpose" required oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="What content, service, or sale created this income?"></textarea></label>
-              <label class="span-6">Receipt / Screenshot / Proof<input id="simpleEvidenceFile" type="file" accept="image/*,.pdf" capture="environment"><span class="helper" id="simpleEvidenceHint">Optional proof.</span></label>
+              <label class="span-6" id="simplePurposeField"><span id="simplePurposeLabel">Short note</span><textarea id="simplePurpose" oninput="updateSimpleMappingPreview()" onkeyup="updateSimpleMappingPreview()" placeholder="Optional note"></textarea></label>
+              <label class="span-6" id="simpleProofField">Receipt / Screenshot / Proof<input id="simpleEvidenceFile" type="file" accept="image/*,.pdf" capture="environment"><span class="helper" id="simpleEvidenceHint">Optional proof.</span></label>
               <div class="span-12 actions form-actions">
                 <button class="primary" type="submit">Save Simple Entry</button>
                 <button type="button" class="ghost" id="clearSimpleForm">Clear Entry</button>
                 <button type="button" class="ghost" id="openAdvancedForm">Use Advanced Fields</button>
               </div>
             </form>
+            <div class="post-save-panel field-hidden" id="postSavePanel">
+              <strong>Saved.</strong>
+              <span id="postSaveText">Add another item for this business and tax year, or complete the tax-year review.</span>
+              <div class="actions">
+                <button class="primary" type="button" id="addMoreEntry">Add More</button>
+                <button class="ghost" type="button" id="completeYearReview">Complete Tax Year Review</button>
+              </div>
+            </div>
           </article>
           <article class="panel span-12">
             <div class="section-title">
@@ -212,7 +244,7 @@
               </select></label>
               <label>Tax Year<input id="recordTaxYear" type="number" min="2000" max="2100" required></label>
               <label>Date<input id="recordDate" type="date" required></label>
-              <label>USD Amount / FMV <button class="info" data-tip="FMV means fair market value: the estimated dollar value at the time received. If a product, trip, crypto, or other item is received in exchange for content, promotion, services, reviews, or brand work, it may need to be tracked as income at FMV. Consult a qualified tax professional.">i</button><input id="recordAmount" type="number" step="0.01" min="0" required></label>
+              <label>USD Amount / FMV <button class="info" data-tip="FMV means fair market value: the estimated dollar value at the time received. If a product, trip, crypto, or other item is received in exchange for content, promotion, services, reviews, or brand work, it may need to be tracked as income at FMV. Consult a qualified tax professional.">i</button><input id="recordAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" required></label>
               <div class="field-block">
                 <div class="field-label">Business Use % <button type="button" class="info" data-tip="Use this when an item is partly business and partly personal, or shared between activities. Example: a camera used 80% for content and 20% personal. Educational only; consult a qualified tax professional.">i</button></div>
                 <div class="percent-control">
@@ -256,19 +288,27 @@
               </div>
             </form>
           </article>
+        </div>
+      </section>
+
+      <section class="view" id="records">
+        <div class="grid">
           <article class="panel span-12">
             <div class="section-title">
-              <h3>Records</h3>
+              <h3>Year Review</h3>
               <div class="record-toggles">
                 <span class="chip" id="recordsYearLabel">Showing selected year</span>
                 <label class="compact"><input type="checkbox" id="showAllYears"> Show all years</label>
                 <label class="compact"><input type="checkbox" id="showDeleted"> Show deleted</label>
               </div>
             </div>
+            <div id="recordsYearSummary"></div>
+            <div id="recordsProfitNotice"></div>
+            <div id="recordsProfitPreview" class="table-wrap"></div>
             <div class="table-wrap" id="recordsTable"></div>
           </article>
           <article class="panel span-12">
-            <div class="section-title"><h3>Recordkeeping History <button class="info" data-tip="This change log records creates, edits, soft deletes, restores, imports, and reasons. It is for recordkeeping only and does not guarantee IRS acceptance.">i</button></h3></div>
+            <div class="section-title"><h3>Saved Records & History <button class="info" data-tip="This change log records creates, edits, soft deletes, restores, imports, and reasons. It is for recordkeeping only and does not guarantee IRS acceptance.">i</button></h3><span class="chip" id="auditYearLabel">Showing selected year</span></div>
             <div class="table-wrap" id="auditTable"></div>
           </article>
         </div>
@@ -277,20 +317,20 @@
       <section class="view" id="factors">
         <article class="panel">
           <div class="section-title">
-            <h3>Profit Motive Review <button class="info" data-tip="Section 183 limits deductions for activities not engaged in for profit. The IRS looks at all facts and circumstances; no single factor controls.">i</button></h3>
-            <button class="primary" id="saveFactors">Save Factors</button>
+            <h3>Profit Alert <button class="info" data-tip="Section 183 limits deductions for activities not engaged in for profit. The IRS looks at all facts and circumstances; no single factor controls.">i</button></h3>
+            <button class="primary" id="saveFactors">Submit Review</button>
           </div>
-          <div class="alert">
+          <div class="alert field-hidden" id="profitReviewIntro">
             <strong>Bestie Alert:</strong> If this activity is only for personal enjoyment and you do not intend to make a profit, these profit motive questions may not apply. If you are treating this activity as a business, answer the questions below to help organize your records. When needed, confer with a qualified tax professional.
           </div>
-          <div class="alert risk">
+          <div class="alert risk field-hidden" id="hobbyTreatmentIntro">
             <strong>Hobby treatment note:</strong> If you and your tax professional determine the activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.
           </div>
           <div id="factorSummary"></div>
           <div id="factorList"></div>
           <div class="actions form-actions factor-save-bottom">
-            <button class="primary" id="saveFactorsBottom">Save Profit Review</button>
-            <span class="muted">Saves your answers and notes to this business/activity. Educational record organization only.</span>
+            <button class="primary" id="saveFactorsBottom">Submit Review</button>
+            <span class="muted">Creates an educational discussion summary to print or review with a qualified tax professional.</span>
           </div>
         </article>
       </section>
@@ -299,8 +339,8 @@
         <div class="grid">
           <article class="panel span-6">
             <div class="section-title">
-              <h3>Batch CSV Import</h3>
-              <p class="muted">Paste rows from bank, platform, or wallet exports after matching the column names.</p>
+              <h3>Import / Export</h3>
+              <p class="muted">Optional tools for tax pros, cleanup, and moving records.</p>
             </div>
             <textarea id="csvImport" placeholder="business_id,record_type,tax_year,event_date,amount_usd,allocation_percent,asset_review,shared_use_note,category,description,schedule_line,counterparty,fmv_method,crypto_asset,crypto_amount,crypto_wallet,transaction_hash,evidence_note"></textarea>
             <button class="primary" id="importBtn">Import CSV</button>
@@ -311,6 +351,10 @@
             <p class="muted">For brand gifts, barter, products, trips, or items received in exchange for services, posts, reviews, promotion, or content, enter the fair market value in amount_usd and explain the FMV method.</p>
             <p class="muted">For crypto, enter the USD value at receipt or payment time, plus token amount and transaction hash if available.</p>
             <p class="muted">For multiple businesses, include business_id or choose the business before manual entry. Use allocation_percent and shared_use_note for shared items.</p>
+          </article>
+          <article class="panel span-12">
+            <div class="section-title"><h3>Reset</h3><p class="muted">Use only when you want to clear this local walkthrough file.</p></div>
+            <button class="ghost danger" id="resetWalkthroughBtn" type="button">Reset / Clear Data</button>
           </article>
         </div>
       </section>
@@ -333,6 +377,6 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="/app.js?v=31"></script>
+  <script src="/app.js?v=47"></script>
 </body>
 </html>

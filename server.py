@@ -235,15 +235,22 @@ def read_json(handler):
     return json.loads(handler.rfile.read(length).decode("utf-8"))
 
 
+def money_value(value):
+    cleaned = str(value or "").replace("$", "").replace(",", "").strip()
+    if not cleaned:
+        return 0.0
+    return round(float(cleaned), 2)
+
+
 def normalize_entry(payload):
     record_type = payload.get("record_type") or "cash_expense"
     tax_year = int(payload.get("tax_year") or datetime.now().year)
     event_date = payload.get("event_date", "").strip()
-    amount = float(payload.get("amount_usd") or 0)
-    schedule_line = payload.get("schedule_line") or ("income" if "income" in record_type else "27b")
-    category = payload.get("category", "").strip()
+    amount = money_value(payload.get("amount_usd"))
+    schedule_line = payload.get("schedule_line") or ("income" if "income" in record_type else "needs_info")
+    category = payload.get("category", "").strip() or ("Income" if "income" in record_type else "Needs info")
     counterparty = payload.get("counterparty", "").strip()
-    evidence_note = payload.get("evidence_note", "").strip()
+    evidence_note = payload.get("evidence_note", "").strip() or "Quick capture"
     if not event_date:
         raise ValueError("Date is required before saving a contemporaneous record.")
     try:
@@ -254,14 +261,6 @@ def normalize_entry(payload):
         raise ValueError(f"The record date is in {event_year}, but the selected tax year is {tax_year}. Change the date or the tax year before saving.")
     if amount <= 0:
         raise ValueError("Amount must be greater than zero.")
-    if not category:
-        raise ValueError("What was it is required before saving.")
-    if not counterparty:
-        raise ValueError("Payer, payee, provider, or exchange is required before saving.")
-    if not evidence_note:
-        raise ValueError("Business purpose or evidence note is required before saving.")
-    if "income" not in record_type and not payload.get("schedule_line"):
-        raise ValueError("Schedule C organizer line is required for expenses after the item is described.")
     return {
         "business_id": int(payload.get("business_id") or 1),
         "record_type": record_type,

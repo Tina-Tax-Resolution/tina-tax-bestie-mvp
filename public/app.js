@@ -15,6 +15,7 @@ const factorText = [
 
 const scheduleCLines = [
   ["income", "Income - Schedule C line 1, gross receipts or sales"],
+  ["needs_info", "Needs info - add description for Schedule C mapping"],
   ["8", "Line 8 - Advertising"],
   ["9", "Line 9 - Car and truck expenses"],
   ["10", "Line 10 - Commissions and fees"],
@@ -79,13 +80,17 @@ const businessSuggestions = [
 
 const paymentTypeOptions = {
   cash_income: [
-    ["", "Select remittance type"],
+    ["", "How were you paid?"],
+    ["cash", "Cash"],
+    ["check", "Check"],
+    ["bank_deposit", "Bank deposit / ACH"],
+    ["card_processor", "Debit / credit card processor"],
+    ["zelle_venmo", "Zelle / Venmo / Cash App"],
     ["platform_payout", "Platform payout"],
-    ["client_payment", "Client payment"],
     ["brand_deal", "Brand deal / sponsorship"],
     ["affiliate", "Affiliate payout"],
-    ["cash_check", "Cash / check"],
-    ["zelle_venmo", "Zelle / Venmo / Cash App"],
+    ["crypto_business", "Crypto"],
+    ["product_gift_barter", "Product / gift / barter"],
     ["other_income", "Other income"]
   ],
   cash_expense: [
@@ -124,12 +129,14 @@ const paymentTypeOptions = {
 let state = { settings: {}, businesses: [], entries: [], factors: [], audit: [] };
 let evidenceFilePayload = { name: "", type: "", data: "" };
 let profitReviewUnlocked = false;
+let profitReviewSubmitted = false;
 let selectedTaxYearMemory = "";
 let selectedBusinessMemory = "";
 const hobbyTreatmentNote = "If this activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.";
 const fmvEvidenceText = "FMV support: save retail listing, comparable sale, invoice, contract, exchange price, appraised value, or other contemporaneous proof. Educational only; confer with a qualified tax professional.";
 
 function lineLabel(line) {
+  if (!line) return "Needs info - add description for Schedule C mapping";
   return (scheduleCLines.find(([value]) => value === line) || ["27b", "Line 27b - Other expenses"])[1];
 }
 
@@ -200,20 +207,36 @@ function updateSimpleMappingPreview() {
   const type = $("simpleType").value;
   const what = $("simpleWhat").value.trim();
   const purpose = $("simplePurpose").value.trim();
+  const paymentValue = $("simplePaymentType")?.value || "";
   const line = inferLineFrom(type, what, purpose);
-  const words = `${what} ${purpose}`.toLowerCase();
+  const words = `${what} ${purpose} ${paymentValue}`.toLowerCase();
   updateSimpleEntryLabels(type);
   updatePaymentTypeOptions(type);
   updateSimplePresetButtons(type);
   const giftContext = updateGiftReviewUI(type, words);
   const giftStatus = $("giftExchangeStatus")?.value || "";
   updateGiftReviewHint(giftContext);
+  updatePaymentContext();
   updateFmvHelp(type, giftContext, giftStatus);
-  $("simpleSchedulePreview").classList.toggle("empty", !what && !purpose);
+  const preview = $("simpleSchedulePreview");
+  if (!preview) return;
+  preview.classList.toggle("empty", !what && !purpose);
+  if (type === "cash_income" && paymentValue === "crypto_business") {
+    preview.textContent = "Crypto business payment: save the USD value at the time received. This app includes business crypto payments in income, but does not calculate later crypto gain/loss.";
+    return;
+  }
+  if (type === "cash_income" && paymentValue === "product_gift_barter") {
+    preview.textContent = "Product/gift/barter received: save the fair market value and answer whether it was received for content, review, service, or promotion.";
+    return;
+  }
+  if (type === "cash_income") {
+    preview.textContent = "Income can be saved with tax year, date, amount, and payment type. Payer and proof are optional.";
+    return;
+  }
   if (!what && !purpose) {
-    $("simpleSchedulePreview").textContent = type.includes("income")
-      ? "Type the income, payout, gift, barter, or crypto item to see how it will be organized."
-      : "Type the expense you paid to see the Schedule C mapping.";
+    preview.textContent = type.includes("income")
+      ? "Add what was received if this was a gift, barter, product, or crypto item."
+      : "Optional: add what you paid for to get a Schedule C organizer suggestion. Blank expenses save as Needs info.";
     return;
   }
   if (type.includes("income")) {
@@ -222,7 +245,7 @@ function updateSimpleMappingPreview() {
       : giftStatus === "unsure"
         ? " Gift/product was marked not sure, so this will be saved as review-needed."
         : "";
-    $("simpleSchedulePreview").textContent = `Maps as income. Review FMV if this is a product, gift, barter, or crypto.${giftNote}`;
+    preview.textContent = `Maps as income. Review FMV if this is a product, gift, barter, or crypto.${giftNote}`;
     return;
   }
   const giftGivenNote = giftStatus === "yes" && giftContext.direction === "given"
@@ -235,7 +258,7 @@ function updateSimpleMappingPreview() {
     : words.includes("rent")
       ? "Reason: rent/lease wording was detected."
       : "You can change this later in Advanced Fields.";
-  $("simpleSchedulePreview").textContent = `Suggested Schedule C line: ${lineLabel(line || "27b")}. ${reason}${giftGivenNote ? ` ${giftGivenNote}` : ""}`;
+  preview.textContent = `Suggested Schedule C line: ${lineLabel(line || "needs_info")}. ${reason}${giftGivenNote ? ` ${giftGivenNote}` : ""}`;
 }
 
 function setSimpleType(type) {
@@ -266,38 +289,105 @@ function dateMatchesTaxYear(dateValue, taxYear) {
   return { ok: true, message: "" };
 }
 
+function setDateBoundsForTaxYear() {
+  const year = $("taxYear")?.value || "";
+  ["simpleDate", "recordDate"].forEach(id => {
+    const field = $(id);
+    if (!field) return;
+    if (year) {
+      field.min = `${year}-01-01`;
+      field.max = `${year}-12-31`;
+    } else {
+      field.removeAttribute("min");
+      field.removeAttribute("max");
+    }
+  });
+  updateTaxYearRangeHelp();
+}
+
+function updateTaxYearRangeHelp() {
+  const el = $("taxYearRangeHelp");
+  if (!el) return;
+  const year = $("taxYear")?.value || "";
+  const business = $("businessFilter")?.value ? businessName($("businessFilter").value) : "";
+  if (!year) {
+    el.textContent = "Choose a tax year to see the January 1 through December 31 record period.";
+    return;
+  }
+  el.innerHTML = `<strong>Tax Year ${escapeHtml(year)}:</strong> January 1, ${escapeHtml(year)} through December 31, ${escapeHtml(year)}${business ? ` for ${escapeHtml(business)}` : ""}.`;
+}
+
+function clearMismatchedDate(fieldId, taxYear = $("taxYear")?.value) {
+  const field = $(fieldId);
+  if (!field?.value || !taxYear) return;
+  const check = dateMatchesTaxYear(field.value, taxYear);
+  if (!check.ok) {
+    field.value = "";
+    toast(check.message);
+  }
+}
+
+function normalizeMoneyValue(value) {
+  return String(value || "").replace(/[$,\s]/g, "");
+}
+
+function validMoneyValue(value) {
+  const normalized = normalizeMoneyValue(value);
+  return normalized && /^\d+(\.\d{1,2})?$/.test(normalized) && Number(normalized) > 0;
+}
+
+function moneyFieldValue(id) {
+  const normalized = normalizeMoneyValue($(id).value);
+  return normalized ? Number(normalized).toFixed(2) : "";
+}
+
 function updateSimpleEntryLabels(type = $("simpleType").value) {
   const amountLabel = $("simpleAmountLabel");
+  const whatLabel = $("simpleWhatLabel");
   const whoLabel = $("simpleWhoLabel");
+  const purposeLabel = $("simplePurposeLabel");
   const whatInput = $("simpleWhat");
   const whoInput = $("simpleWho");
   const purposeInput = $("simplePurpose");
+  const whatField = $("simpleWhatField");
+  const whoField = $("simpleWhoField");
+  const purposeField = $("simplePurposeField");
   if (!amountLabel || !whoLabel) return;
+  if (whatField) whatField.classList.remove("field-hidden");
+  if (whoField) whoField.classList.remove("field-hidden");
+  if (purposeField) purposeField.classList.add("field-hidden");
+  if (whatLabel) whatLabel.textContent = "What was it? (optional)";
+  if (purposeLabel) purposeLabel.textContent = "Short note (optional)";
   if (type === "cash_expense" || type === "crypto_expense") {
     amountLabel.textContent = type === "crypto_expense" ? "USD value paid" : "Amount paid";
     whoLabel.textContent = "Payee";
-    if (whatInput) whatInput.placeholder = type === "crypto_expense" ? "Gas fee, exchange fee, crypto paid to vendor" : "Studio time, computer, mic, software, ads, contractor";
-    if (whoInput) whoInput.placeholder = "Studio, Amazon, Apple, contractor, software company";
-    if (purposeInput) purposeInput.placeholder = "Short note: what business use was this for?";
+    if (whatInput) whatInput.placeholder = type === "crypto_expense" ? "Optional: gas fee, exchange fee, crypto paid to vendor" : "Optional: studio time, computer, mic, software, ads";
+    if (whoInput) whoInput.placeholder = "Optional: studio, Amazon, contractor, software company";
+    if (purposeInput) purposeInput.placeholder = "Optional note";
   } else if (type === "noncash_income") {
     amountLabel.textContent = "Fair market value";
     whoLabel.textContent = "Provider / brand";
+    if (whatLabel) whatLabel.textContent = "What did you receive?";
+    if (purposeField) purposeField.classList.remove("field-hidden");
+    if (purposeLabel) purposeLabel.textContent = "Gift/barter note";
     if (whatInput) whatInput.placeholder = "Brand product, sponsored trip, barter service, gifted equipment";
-    if (whoInput) whoInput.placeholder = "Brand, sponsor, company, person";
-    if (purposeInput) purposeInput.placeholder = "Short note: what post, review, service, or promotion was expected?";
+    if (whoInput) whoInput.placeholder = "Optional: brand, sponsor, company, person";
+    if (purposeInput) purposeInput.placeholder = "What post, review, service, or promotion was expected?";
   } else if (type === "crypto_income") {
     amountLabel.textContent = "USD value received";
     whoLabel.textContent = "Payer / exchange / wallet";
-    if (whatInput) whatInput.placeholder = "USDC sponsorship, crypto payment, token reward";
-    if (whoInput) whoInput.placeholder = "Brand, client, Coinbase, wallet";
-    if (purposeInput) purposeInput.placeholder = "Short note: why did the business receive this crypto?";
+    if (whatInput) whatInput.placeholder = "Optional: USDC sponsorship, crypto payment, token reward";
+    if (whoInput) whoInput.placeholder = "Optional: brand, client, Coinbase, wallet";
+    if (purposeInput) purposeInput.placeholder = "Optional note";
   } else {
     amountLabel.textContent = "Amount received";
     whoLabel.textContent = "Payer";
-    if (whatInput) whatInput.placeholder = "Platform payout, brand deal, client payment, affiliate income, sponsorship";
-    if (whoInput) whoInput.placeholder = "YouTube, TikTok, Meta, brand, client, affiliate network";
-    if (purposeInput) purposeInput.placeholder = "Short note: what content, service, or sale created this income?";
+    if (whatField) whatField.classList.add("field-hidden");
+    if (purposeField) purposeField.classList.add("field-hidden");
+    if (whoInput) whoInput.placeholder = "Optional: YouTube, TikTok, Meta, brand, client";
+    if (purposeInput) purposeInput.placeholder = "Optional note";
   }
+  updateTaxYearRangeHelp();
 }
 
 function updatePaymentTypeOptions(type = $("simpleType").value) {
@@ -309,6 +399,35 @@ function updatePaymentTypeOptions(type = $("simpleType").value) {
   label.textContent = type.includes("income") ? "Payment / remittance type" : "Payment method / expense type";
   select.innerHTML = options.map(([value, text]) => `<option value="${value}">${text}</option>`).join("");
   if (options.some(([value]) => value === current)) select.value = current;
+}
+
+function updatePaymentContext() {
+  const type = $("simpleType")?.value || "";
+  const paymentValue = $("simplePaymentType")?.value || "";
+  const cryptoField = $("cryptoBusinessField");
+  const whatField = $("simpleWhatField");
+  const purposeField = $("simplePurposeField");
+  const amountLabel = $("simpleAmountLabel");
+  const whatLabel = $("simpleWhatLabel");
+  const purposeLabel = $("simplePurposeLabel");
+  const showCrypto = type === "cash_income" && paymentValue === "crypto_business";
+  const showGift = type === "cash_income" && paymentValue === "product_gift_barter";
+  if (cryptoField) cryptoField.classList.toggle("field-hidden", !showCrypto);
+  if (showCrypto) {
+    if (amountLabel) amountLabel.textContent = "USD value when received";
+    if (whatField) whatField.classList.remove("field-hidden");
+    if (whatLabel) whatLabel.textContent = "Crypto note (optional)";
+    if ($("simpleWhat")) $("simpleWhat").placeholder = "Optional: BTC payment, ETH tip, USDC sponsorship";
+  }
+  if (showGift) {
+    if (amountLabel) amountLabel.textContent = "Fair market value";
+    if (whatField) whatField.classList.remove("field-hidden");
+    if (purposeField) purposeField.classList.remove("field-hidden");
+    if (whatLabel) whatLabel.textContent = "What did you receive?";
+    if (purposeLabel) purposeLabel.textContent = "Gift/barter note";
+    if ($("simpleWhat")) $("simpleWhat").placeholder = "Brand product, sponsored trip, gifted equipment";
+    if ($("simplePurpose")) $("simplePurpose").placeholder = "What post, review, service, or promotion was expected?";
+  }
 }
 
 function paymentTypeLabel(type, value) {
@@ -387,7 +506,8 @@ function updateGiftReviewHint(context = { direction: "" }) {
 function updateFmvHelp(type, context, giftStatus) {
   const help = $("fmvHelp");
   if (!help) return;
-  const show = type === "noncash_income" || type.includes("crypto") || giftStatus === "yes" || giftStatus === "unsure" || context.visible;
+  const paymentValue = $("simplePaymentType")?.value || "";
+  const show = type === "noncash_income" || type.includes("crypto") || paymentValue === "crypto_business" || paymentValue === "product_gift_barter" || giftStatus === "yes" || giftStatus === "unsure" || context.visible;
   help.classList.toggle("field-hidden", !show);
 }
 
@@ -478,6 +598,10 @@ function yearsWithRecords(rows) {
   return rows.filter(row => row.income > 0 || row.expenses > 0);
 }
 
+function yearHasRecords(row) {
+  return Number(row?.income || 0) > 0 || Number(row?.expenses || 0) > 0;
+}
+
 function recentFiveYearWindow() {
   if (!$("taxYear").value) return [];
   const selected = Number($("taxYear").value);
@@ -517,13 +641,23 @@ function profitPath(windowRows) {
   };
 }
 
-function readinessScore() {
-  const factorPoints = factorsForBusiness().reduce((sum, f) => sum + (f.answer === "yes" ? 2 : f.answer === "mixed" ? 1 : 0) + (f.note ? .35 : 0), 0);
-  const factorScore = factorPoints / (9 * 2.35);
-  const path = profitPath(recentFiveYearWindow());
-  const profitScore = path.profitRows.length / 3;
-  const trajectoryBoost = (path.incomeImproving ? .12 : 0) + (path.lossNarrowing ? .12 : 0);
-  return Math.min(100, Math.round(((factorScore * .65) + (Math.min(1, profitScore) * .23) + trajectoryBoost) * 100));
+function documentationCompletenessScore() {
+  const rows = entriesForYear();
+  if (!rows.length) return 0;
+  const total = rows.reduce((sum, entry) => {
+    const checks = [
+      entry.tax_year,
+      entry.event_date,
+      Number(entry.amount_usd) > 0,
+      String(entry.category || "").trim(),
+      String(entry.counterparty || "").trim(),
+      isIncome(entry) || String(entry.schedule_line || "").trim(),
+      String(entry.evidence_note || entry.fmv_method || entry.shared_use_note || "").trim(),
+      entry.evidence_file_data || !/receipt|invoice|contract|screenshot|proof|FMV|gift|barter|crypto/i.test(`${entry.record_type} ${entry.category} ${entry.description} ${entry.evidence_note}`)
+    ];
+    return sum + checks.filter(Boolean).length / checks.length;
+  }, 0);
+  return Math.round((total / rows.length) * 100);
 }
 
 function renderTaxYears() {
@@ -535,6 +669,7 @@ function renderTaxYears() {
   $("taxYear").value = [...$("taxYear").options].some(option => option.value === String(previous)) ? String(previous) : "";
   selectedTaxYearMemory = $("taxYear").value;
   $("recordTaxYear").value = $("taxYear").value;
+  setDateBoundsForTaxYear();
 }
 
 function renderBusinessFilter() {
@@ -564,7 +699,7 @@ function renderDashboard() {
     $("profitYears").textContent = "0 losses";
     $("score").textContent = "0%";
     $("scoreBar").style.width = "0%";
-    $("scoreText").textContent = "Add your first business/activity and records.";
+    $("scoreText").textContent = "Add records to measure whether the record file is complete.";
     $("profitAlert").innerHTML = `<div class="alert"><strong>Start clean:</strong> Add your business/activity, then enter income and expenses as they happen. This creates a live recordkeeping file based on your inputs.</div>`;
     $("yearChart").innerHTML = `<p class="muted">No records yet.</p>`;
     renderProfitLossTable([]);
@@ -580,7 +715,7 @@ function renderDashboard() {
     $("profitYears").textContent = "Choose year";
     $("score").textContent = "0%";
     $("scoreBar").style.width = "0%";
-    $("scoreText").textContent = "Choose a tax year before reviewing income, expenses, or profit motive alerts.";
+    $("scoreText").textContent = "Choose a tax year before reviewing documentation completeness.";
     $("profitAlert").innerHTML = `<div class="alert"><strong>Choose tax year:</strong> Select the tax year you want to work on. The app will keep each tax year separate and only run the five-year profit review after a year is selected.</div>`;
     updateProfitReviewAccess(emptyPath);
     renderChart(yearResults());
@@ -596,10 +731,10 @@ function renderDashboard() {
   $("expenseTotal").textContent = money.format(t.expenses);
   $("netTotal").textContent = money.format(t.net);
   $("profitYears").textContent = `${path.lossRows.length} losses`;
-  const score = readinessScore();
+  const score = documentationCompletenessScore();
   $("score").textContent = `${score}%`;
   $("scoreBar").style.width = `${score}%`;
-  $("scoreText").textContent = score >= 75 ? "Strong educational record file. Keep evidence current." : score >= 50 ? "Moderate support. Add evidence, FMV support, and profit explanations." : "Needs stronger records, business-purpose notes, and profit path support.";
+  $("scoreText").textContent = score >= 75 ? "Most records have the core details and support fields completed." : score >= 50 ? "Some records need more notes, proof, FMV support, or payer/payee details." : "Many records need missing details before they are ready for review.";
   renderProfitAlert(windowRows, path);
   updateProfitReviewAccess(path);
   renderChart(yearResults());
@@ -616,9 +751,12 @@ function updateProfitReviewAccess(path = profitPath(recentFiveYearWindow())) {
 
 function renderProfitAlert(rows, path) {
   const el = $("profitAlert");
+  el.innerHTML = profitAlertHtml(path);
+}
+
+function profitAlertHtml(path) {
   if (!path.recorded.length) {
-    el.innerHTML = `<div class="alert"><strong>Start your business story:</strong> Add income, expenses, gifts/barter, crypto, and evidence. The app will watch the profit path as years are added.</div>`;
-    return;
+    return `<div class="alert"><strong>Start your business story:</strong> Add income, expenses, gifts/barter, crypto, and evidence. The app will watch the profit path as years are added.</div>`;
   }
   const trendBits = [
     path.incomeImproving ? "income is moving up" : "",
@@ -626,15 +764,16 @@ function renderProfitAlert(rows, path) {
   ].filter(Boolean);
   const trendText = trendBits.length ? ` The current trend shows ${trendBits.join(" and ")}.` : "";
   if (path.threeLossTrigger) {
-    el.innerHTML = `<div class="alert risk"><strong>Bestie Alert:</strong> Your completed-year records show losses in ${path.lossRows.length} of the last 5 tax years for ${escapeHtml(businessName(selectedBusinessId()))}. That does not automatically mean it is a hobby, but the IRS may look more closely at whether you are operating with a profit motive.${trendText} If you are treating this as a business, answer the questions below and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Review Profit Motive Factors</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
-    return;
+    return `<div class="alert risk"><strong>Bestie Alert:</strong> Your completed-year records show losses in ${path.lossRows.length} of the last 5 tax years for ${escapeHtml(businessName(selectedBusinessId()))}. That does not automatically mean it is a hobby, but the IRS may look more closely at whether you are operating with a profit motive.${trendText} If you are treating this as a business, answer the questions below and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Review Profit Motive Factors</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
   }
   if (path.profitRows.length >= 3) {
-    el.innerHTML = `<div class="alert good"><strong>Profit pattern note:</strong> Your records show ${path.profitRows.length} profitable years in the selected five-year window. This may support a business pattern, but it is not a guarantee. Keep receipts, contracts, FMV proof, and business-purpose notes current.</div>`;
-    return;
+    return `<div class="alert good"><strong>Profit pattern note:</strong> Your records show ${path.profitRows.length} profitable years in the selected five-year window. This may support a business pattern, but it is not a guarantee. Keep receipts, contracts, FMV proof, and business-purpose notes current.</div>`;
+  }
+  if (path.lossRows.length === 2) {
+    return `<div class="alert warn"><strong>Heads up:</strong> Your completed-year records show 2 loss years in this five-year window. That can happen in a startup phase, but keep documenting income growth, business changes, receipts, and why expenses help the activity make money.${trendText} The 9-question Profit Alert appears if saved records show losses in 3 of 5 completed tax years. Educational record organization only; consult a qualified tax professional.</div>`;
   }
   const liveNote = path.currentLive && path.currentLive.net < 0 ? ` Current-year ${path.currentLive.year} is live YTD and is not treated as final until the year closes.` : "";
-  el.innerHTML = `<div class="alert"><strong>Profit Path Note:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year window and ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the activity make money."}${liveNote}</div>`;
+  return `<div class="alert"><strong>Profit Path Note:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year window and ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the activity make money."}${liveNote}</div>`;
 }
 
 function renderChart(rows) {
@@ -653,16 +792,133 @@ function renderChart(rows) {
 function renderProfitLossTable(rows) {
   const el = $("profitLossTable");
   if (!el) return;
-  if (!rows.length) {
+  const savedRows = rows.filter(yearHasRecords);
+  if (!savedRows.length) {
     el.innerHTML = `<p class="muted">No yearly profit/loss records yet.</p>`;
     return;
   }
-  el.innerHTML = `<table><thead><tr><th>Tax Year</th><th>Income</th><th>Expenses</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${rows.map(row => {
+  el.innerHTML = `<h4 class="mini-heading">Tax Years With Saved Records</h4><table><thead><tr><th>Tax Year</th><th>Income</th><th>Expenses</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${savedRows.map(row => {
     const net = Number(row.net || 0);
-    const hasRecords = Number(row.income || 0) > 0 || Number(row.expenses || 0) > 0;
     const current = Number(state.settings.current_tax_year || new Date().getFullYear());
-    const status = !hasRecords ? "No records" : Number(row.year) === current ? "Live YTD" : net < 0 ? "Loss year" : net > 0 ? "Profit year" : "Break even";
+    const status = Number(row.year) === current ? "Live YTD" : net < 0 ? "Loss year" : net > 0 ? "Profit year" : "Break even";
     return `<tr><td>${row.year}</td><td>${money.format(row.income || 0)}</td><td>${money.format(row.expenses || 0)}</td><td><strong class="${net < 0 ? "loss-text" : "profit-text"}">${money.format(net)}</strong></td><td><span class="chip ${net < 0 ? "risk" : net > 0 ? "good" : ""}">${status}</span></td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+
+function yearResultStatus(row) {
+  const net = Number(row?.net || 0);
+  const income = Number(row?.income || 0);
+  const expenses = Number(row?.expenses || 0);
+  const hasRecords = income > 0 || expenses > 0;
+  if (!hasRecords) return { label: "No records yet", className: "", explanation: "Add income or outlays to see a live profit or loss result." };
+  if (net < 0) return { label: "Loss", className: "risk", explanation: "Expenses/outlays are higher than income for this tax year based on the records entered." };
+  if (net > 0) return { label: "Profit", className: "good", explanation: "Income is higher than expenses/outlays for this tax year based on the records entered." };
+  return { label: "Break even", className: "warn", explanation: "Income and expenses/outlays are equal for this tax year based on the records entered." };
+}
+
+function entryCompletion(entry) {
+  const missing = [];
+  if (!entry.tax_year) missing.push("tax year");
+  if (!entry.event_date) missing.push("date");
+  if (!(Number(entry.amount_usd) > 0)) missing.push("amount");
+  const category = String(entry.category || "").trim();
+  const scheduleLine = String(entry.schedule_line || "").trim();
+  if (!isIncome(entry) && (!category || category === "Needs info")) missing.push("what it was");
+  if (!isIncome(entry) && (!scheduleLine || scheduleLine === "needs_info")) missing.push("Schedule C mapping");
+
+  const review = [];
+  const combined = `${entry.record_type || ""} ${entry.category || ""} ${entry.description || ""} ${entry.fmv_method || ""} ${entry.evidence_note || ""}`;
+  const needsFmv = entry.record_type === "noncash_income" || String(entry.record_type || "").includes("crypto") || /gift|barter|brand product|FMV|fair market/i.test(combined);
+  if (needsFmv && !String(entry.fmv_method || "").trim()) review.push("FMV support");
+  if (entry.asset_review && entry.asset_review !== "not_needed") review.push(assetLabel(entry.asset_review));
+  if (!entry.evidence_file_data && /receipt|invoice|contract|screenshot|proof/i.test(combined)) review.push("attach proof if available");
+
+  if (missing.length) {
+    return {
+      label: "Needs info",
+      className: "risk",
+      countsAsReady: false,
+      detail: `Missing: ${missing.join(", ")}.`
+    };
+  }
+  if (review.length) {
+    return {
+      label: "Review",
+      className: "warn",
+      countsAsReady: true,
+      detail: `Saved; review ${review.join(", ")}.`
+    };
+  }
+  return {
+    label: "Complete",
+    className: "good",
+    countsAsReady: true,
+    detail: isIncome(entry)
+      ? "Saved with tax year, date, amount, and remittance type."
+      : "Saved with the core tax-year, amount, description, and organizer mapping."
+  };
+}
+
+function renderRecordsYearSummary() {
+  const el = $("recordsYearSummary");
+  if (!el) return;
+  if (!$("taxYear")?.value) {
+    el.innerHTML = `<div class="record-year-summary"><strong>Select a tax year</strong><p class="muted">The app keeps each tax year separate. Choose a year to see live profit or loss for that year.</p></div>`;
+    return;
+  }
+  const t = totals();
+  const status = yearResultStatus(t);
+  const label = selectedTaxYearStatus();
+  const savedRows = t.rows;
+  const completeCount = savedRows.filter(entry => entryCompletion(entry).countsAsReady).length;
+  const needsInfoCount = savedRows.length - completeCount;
+  const completionNote = savedRows.length
+    ? `${completeCount} saved record${completeCount === 1 ? "" : "s"} ready; ${needsInfoCount} need${needsInfoCount === 1 ? "s" : ""} more information.`
+    : "No saved records yet for this tax year.";
+  el.innerHTML = `
+    <div class="record-year-summary ${status.className}">
+      <div>
+        <span>${escapeHtml(label)} result</span>
+        <strong>${escapeHtml(status.label)} ${money.format(Math.abs(t.net))}</strong>
+        <p>${escapeHtml(status.explanation)} ${escapeHtml(completionNote)}</p>
+      </div>
+      <div><span>Income</span><strong>${money.format(t.income)}</strong></div>
+      <div><span>Expenses / Outlays</span><strong>${money.format(t.expenses)}</strong></div>
+      <div><span>Net</span><strong class="${t.net < 0 ? "loss-text" : t.net > 0 ? "profit-text" : ""}">${money.format(t.net)}</strong></div>
+    </div>`;
+}
+
+function renderRecordsProfitNotice(path = profitPath(recentFiveYearWindow())) {
+  const el = $("recordsProfitNotice");
+  if (!el) return;
+  if (!$("taxYear")?.value) {
+    el.innerHTML = `<div class="alert"><strong>Choose tax year:</strong> Select a tax year to preview the five-year profit/loss pattern and any profit motive prompt.</div>`;
+    return;
+  }
+  el.innerHTML = profitAlertHtml(path);
+}
+
+function renderRecordsProfitPreview(rows = recentFiveYearWindow()) {
+  const el = $("recordsProfitPreview");
+  if (!el) return;
+  if (!$("taxYear")?.value) {
+    el.innerHTML = "";
+    return;
+  }
+  const savedRows = rows.filter(yearHasRecords);
+  const emptyYears = rows.filter(row => !yearHasRecords(row)).map(row => row.year);
+  if (!savedRows.length) {
+    el.innerHTML = `<div class="alert"><strong>Five-Year Review Window:</strong> ${rows.map(row => row.year).join(", ")}. No saved records yet in this selected window.</div>`;
+    return;
+  }
+  const emptyNote = emptyYears.length
+    ? `<p class="muted">Five-year review window also includes ${emptyYears.join(", ")} with no saved records. Those years are shown for Section 183 context only; they are not stored income or expense records.</p>`
+    : "";
+  el.innerHTML = `<h4 class="mini-heading">Tax Years With Saved Records In This Five-Year Window</h4>${emptyNote}<table><thead><tr><th>Tax Year</th><th>Income</th><th>Expenses</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${savedRows.map(row => {
+    const net = Number(row.net || 0);
+    const current = Number(state.settings.current_tax_year || new Date().getFullYear());
+    const status = Number(row.year) === current ? "Live YTD" : net < 0 ? "Loss year" : net > 0 ? "Profit year" : "Break even";
+    return `<tr><td>${row.year}</td><td>${money.format(row.income || 0)}</td><td>${money.format(row.expenses || 0)}</td><td><strong class="${net < 0 ? "loss-text" : net > 0 ? "profit-text" : ""}">${money.format(net)}</strong></td><td><span class="chip ${net < 0 ? "risk" : net > 0 ? "good" : net === 0 ? "warn" : ""}">${status}</span></td></tr>`;
   }).join("")}</tbody></table>`;
 }
 
@@ -715,16 +971,25 @@ function renderPortalSnapshot(t = totals(), path = profitPath(recentFiveYearWind
 
 function renderRecords() {
   const rows = activeEntries();
+  const windowRows = recentFiveYearWindow();
+  const path = profitPath(windowRows);
+  updateProfitReviewAccess(path);
   if ($("recordsYearLabel")) {
     $("recordsYearLabel").textContent = $("showAllYears")?.checked
       ? "Showing all years"
       : `Showing ${selectedTaxYearStatus()} only`;
   }
-  $("recordsTable").innerHTML = rows.length ? `<table><thead><tr><th>Business</th><th>Year</th><th>Date</th><th>Type</th><th>Amount</th><th>Use %</th><th>Schedule C</th><th>Category</th><th>Evidence</th><th>Actions</th></tr></thead><tbody>${rows.map(entry => `
+  renderRecordsYearSummary();
+  renderRecordsProfitNotice(path);
+  renderRecordsProfitPreview(windowRows);
+  $("recordsTable").innerHTML = rows.length ? `<table><thead><tr><th>Business</th><th>Year</th><th>Date</th><th>Status</th><th>Type</th><th>Amount</th><th>Use %</th><th>Schedule C</th><th>Category</th><th>Evidence</th><th>Actions</th></tr></thead><tbody>${rows.map(entry => {
+    const completion = entryCompletion(entry);
+    return `
     <tr class="${entry.deleted_at ? "deleted" : ""}">
       <td>${escapeHtml(businessName(entry.business_id))}</td>
       <td>${entry.tax_year}</td>
       <td>${entry.event_date}</td>
+      <td><span class="chip ${completion.className}">${escapeHtml(completion.label)}</span><br><span class="muted">${escapeHtml(completion.detail)}</span></td>
       <td><span class="chip ${isIncome(entry) ? "good" : "risk"}">${labelType(entry.record_type)}</span></td>
       <td><strong>${money.format(entry.amount_usd)}</strong></td>
       <td>${Number(entry.allocation_percent || 100)}%${entry.asset_review !== "not_needed" ? `<br><span class="chip warn">${escapeHtml(assetLabel(entry.asset_review))}</span>` : ""}</td>
@@ -732,7 +997,8 @@ function renderRecords() {
       <td>${escapeHtml(entry.category)}<br><span class="muted">${escapeHtml(entry.description)}</span></td>
       <td>${escapeHtml(entry.evidence_note || entry.fmv_method || entry.shared_use_note || "")}${entry.evidence_file_data ? `<br><a href="${entry.evidence_file_data}" target="_blank" rel="noreferrer">View evidence</a>` : ""}</td>
       <td><div class="row-actions">${entry.deleted_at ? `<button class="small" data-restore="${entry.id}">Restore</button>` : `<button class="small" data-edit="${entry.id}">Edit</button><button class="small icon-button danger" data-delete="${entry.id}" aria-label="Delete record ${entry.id}" title="Delete this record"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg><span class="sr-only">Delete</span></button>`}</div></td>
-    </tr>`).join("")}</tbody></table>` : `<p class="muted">No records for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
+    </tr>`;
+  }).join("")}</tbody></table>` : `<p class="muted">No records for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
 }
 
 function renderBusinesses() {
@@ -897,18 +1163,60 @@ function auditSummary(event) {
   return parts.join(" | ");
 }
 
+function auditEventTaxYear(event) {
+  const after = parseAuditJson(event.after_json);
+  const before = parseAuditJson(event.before_json);
+  return String(after?.tax_year || before?.tax_year || "");
+}
+
+function auditMatchesBusiness(event) {
+  const after = parseAuditJson(event.after_json);
+  const before = parseAuditJson(event.before_json);
+  const row = after || before;
+  if (!row?.business_id) return true;
+  return Number(row.business_id) === selectedBusinessId();
+}
+
 function renderAudit() {
-  $("auditTable").innerHTML = state.audit.length ? `<table><thead><tr><th>Time</th><th>Action</th><th>Record detail</th><th>Reason</th></tr></thead><tbody>${state.audit.slice(0, 80).map(event => `<tr><td>${event.created_at}</td><td>${event.action}</td><td>#${event.entry_id || ""}<br><span class="muted">${escapeHtml(auditSummary(event))}</span></td><td>${escapeHtml(event.reason || "")}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No recordkeeping history yet.</p>`;
+  const showAll = $("showAllYears")?.checked;
+  const selectedYear = String($("taxYear")?.value || "");
+  const rows = state.audit
+    .filter(event => auditMatchesBusiness(event))
+    .filter(event => showAll || !selectedYear || auditEventTaxYear(event) === selectedYear)
+    .slice(0, 120);
+  if ($("auditYearLabel")) {
+    $("auditYearLabel").textContent = showAll ? "History for all years" : `History for ${selectedTaxYearStatus()}`;
+  }
+  $("auditTable").innerHTML = rows.length ? `<table><thead><tr><th>Time</th><th>Action</th><th>Record detail</th><th>Reason</th></tr></thead><tbody>${rows.map(event => `<tr><td>${event.created_at}</td><td>${event.action}</td><td>#${event.entry_id || ""}<br><span class="muted">${escapeHtml(auditSummary(event))}</span></td><td>${escapeHtml(event.reason || "")}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">No recordkeeping history for this view.</p>`;
 }
 
 function renderFactors() {
+  const intro = $("profitReviewIntro");
+  const hobby = $("hobbyTreatmentIntro");
+  const topButton = $("saveFactors");
+  const bottomButton = $("saveFactorsBottom");
+  const bottomWrap = document.querySelector(".factor-save-bottom");
   if (!profitReviewUnlocked) {
-    if ($("factorSummary")) $("factorSummary").innerHTML = "";
-    $("factorList").innerHTML = `<div class="alert"><strong>Profit Motive Review locked for now:</strong> The full questions appear after the app detects losses in 3 of the last 5 tax years for this business/activity. Keep adding income, expenses, gifts/barter, crypto, and evidence so the app can watch the profit path.</div>`;
+    intro?.classList.add("field-hidden");
+    hobby?.classList.add("field-hidden");
+    topButton?.classList.add("field-hidden");
+    bottomWrap?.classList.add("field-hidden");
+    if ($("factorSummary")) {
+      $("factorSummary").innerHTML = `<div class="alert"><strong>No Profit Review needed yet.</strong> Keep capturing records. The app will prompt you if saved records show losses in 3 of 5 completed tax years for this business/activity. Educational record organization only.</div>`;
+    }
+    $("factorList").innerHTML = "";
     return;
   }
+  intro?.classList.remove("field-hidden");
+  hobby?.classList.remove("field-hidden");
+  topButton?.classList.remove("field-hidden");
+  bottomWrap?.classList.remove("field-hidden");
   const factors = factorsForBusiness();
-  renderFactorSummary(factors);
+  if (profitReviewSubmitted) {
+    renderFactorSummary(factors);
+  } else if ($("factorSummary")) {
+    $("factorSummary").innerHTML = `<div class="alert risk"><strong>Bestie Alert:</strong> Your records show a repeated loss pattern. Answer the questions below, then click <strong>Submit Review</strong> to generate an educational discussion summary for you and a qualified tax professional. This is record organization only, not tax advice.</div>`;
+  }
   $("factorList").innerHTML = factors.map((factor, index) => `<div class="factor">
     <div class="num">${factor.factor_no}</div>
     <div><h4>${factorText[index][0]} <button class="info" data-tip="${escapeHtml(factorText[index][1])}">i</button></h4><p class="muted">${factorText[index][1]}</p></div>
@@ -956,12 +1264,25 @@ function renderFactorSummary(factors = factorsForBusiness()) {
   const noteText = counts.notes < 3
     ? "Add short evidence notes where possible. Notes can mention receipts, calendars, platform reports, contracts, advisor input, business changes, or why losses occurred."
     : "You added notes to several factors, which helps organize the story behind the records.";
+  const path = profitPath(recentFiveYearWindow());
+  const lossText = path.lossRows.length >= 3
+    ? `Your records show ${path.lossRows.length} completed loss years in the selected five-year window, so this summary is meant to help prepare a discussion about profit motive.`
+    : `Your records show ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"} in the selected five-year window. Keep updating this review as records change.`;
+  const discussionPoints = [
+    path.lossRows.length >= 3 ? "Repeated losses and what business changes were made or planned." : "",
+    path.incomeImproving ? "Income appears to be improving in the saved records." : "Whether income is increasing, flat, or declining.",
+    path.lossNarrowing ? "Losses appear to be narrowing in the saved records." : "Whether losses are narrowing or growing.",
+    counts.notes < 3 ? "Several answers need more written support or documentation." : "Several answers include notes that can help organize the record file."
+  ].filter(Boolean);
   el.innerHTML = `<div class="alert ${className}">
-    <strong>Profit Review Snapshot:</strong> ${strength}.
+    <strong>Profit Motive Discussion Summary:</strong> ${strength}.
+    <p>${escapeHtml(lossText)}</p>
     <p>Yes: ${counts.yes}; Mixed: ${counts.mixed}; No: ${counts.no}; notes added: ${counts.notes}.</p>
     <p>${escapeHtml(supportingText)}</p>
     <p>${escapeHtml(workText)}</p>
     <p>${escapeHtml(noteText)}</p>
+    <p><strong>Discuss with a qualified tax professional:</strong> ${escapeHtml(discussionPoints.join(" "))}</p>
+    <p><strong>Records to gather:</strong> receipts, platform payout reports, contracts, calendars, mileage or travel logs, FMV support for gifts/barter/crypto, separate account records, business plan notes, and evidence of changes made to improve profitability.</p>
     <p class="muted">Educational record organization only. This does not decide whether the activity is a business or hobby, and no single factor controls. The IRS looks at all facts and circumstances. Confer with a qualified tax professional before filing or taking a tax position.</p>
   </div>`;
 }
@@ -987,11 +1308,13 @@ async function saveProfitReview() {
     answer: document.querySelector(`[data-factor-answer="${factor.factor_no}"]`).value,
     note: document.querySelector(`[data-factor-note="${factor.factor_no}"]`).value
   }));
+  profitReviewSubmitted = true;
   await api("/api/factors", { method: "PUT", body: JSON.stringify({ business_id: selectedBusinessId(), factors }) });
   await refresh();
   document.querySelector('[data-view="factors"]').click();
   renderFactorSummary(factors);
-  toast("Profit review saved. Snapshot updated.");
+  $("factorSummary")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  toast("Review submitted. Discussion summary updated.");
 }
 
 function renderAll() {
@@ -1054,7 +1377,7 @@ async function formPayload() {
     record_type: $("recordType").value,
     tax_year: $("recordTaxYear").value,
     event_date: $("recordDate").value,
-    amount_usd: $("recordAmount").value,
+    amount_usd: moneyFieldValue("recordAmount"),
     allocation_percent: $("allocationPercent").value,
     asset_review: $("assetReview").value,
     shared_use_note: $("sharedUseNote").value,
@@ -1091,6 +1414,11 @@ function validateAdvancedEntry() {
       field.focus();
       return false;
     }
+  }
+  if (!validMoneyValue($("recordAmount").value)) {
+    toast("Enter the dollar amount exactly, such as 4000 or 4000.00.");
+    $("recordAmount").focus();
+    return false;
   }
   const dateCheck = dateMatchesTaxYear($("recordDate").value, $("recordTaxYear").value);
   if (!dateCheck.ok) {
@@ -1147,6 +1475,7 @@ function resetForm() {
   $("recordId").value = "";
   $("recordDate").value = "";
   $("recordTaxYear").value = $("taxYear").value;
+  setDateBoundsForTaxYear();
   $("recordBusiness").value = $("businessFilter").value;
   $("allocationPercent").value = 100;
   $("assetReview").value = "not_needed";
@@ -1167,10 +1496,12 @@ function resetSimpleForm(options = {}) {
   $("simpleDate").value = "";
   $("taxYear").value = keepYear;
   $("recordTaxYear").value = keepYear;
+  setDateBoundsForTaxYear();
   $("simpleBusiness").value = keepBusiness;
   $("simpleBusinessSearch").value = keepBusinessName || state.businesses.find(business => String(business.id) === String(keepBusiness))?.name || "";
   $("simpleEvidenceHint").textContent = "Optional proof.";
   $("simpleType").value = keepType;
+  $("postSavePanel")?.classList.add("field-hidden");
   updateSimpleMappingPreview();
 }
 
@@ -1183,21 +1514,30 @@ function clearSimpleEntryFields() {
   $("simpleBusiness").value = keepBusinessId;
   $("simpleBusinessSearch").value = keepBusinessName;
   $("simpleDate").value = "";
+  setDateBoundsForTaxYear();
   $("simpleEvidenceHint").textContent = "Optional proof.";
+  $("postSavePanel")?.classList.add("field-hidden");
   updateSimpleMappingPreview();
   toast("Entry cleared. Tax year, business, and entry type stayed selected.");
 }
 
+function showPostSavePanel() {
+  const panel = $("postSavePanel");
+  if (!panel) return;
+  const year = $("taxYear").value || "this tax year";
+  const business = $("businessFilter").value ? businessName($("businessFilter").value) : "this business";
+  $("postSaveText").textContent = `Add another item for ${business} in ${year}, or complete the tax-year review.`;
+  panel.classList.remove("field-hidden");
+}
+
 function validateSimpleEntry() {
   const type = $("simpleType").value;
+  const paymentValue = $("simplePaymentType").value;
   const required = [
     [$("taxYear"), "Choose the tax year before saving."],
     [$("simpleDate"), "Add the date before saving this contemporaneous record."],
     [$("simpleAmount"), "Add the amount before saving."],
-    [$("simplePaymentType"), type.includes("income") ? "Choose the payment or remittance type before saving." : "Choose the payment method or expense type before saving."],
-    [$("simpleWhat"), type.includes("income") ? "Add what kind of income this was before saving." : "Add what you paid for before saving."],
-    [$("simpleWho"), type.includes("income") ? "Add the payer, provider, or exchange before saving." : "Add the payee before saving."],
-    [$("simplePurpose"), "Add a short note before saving."]
+    [$("simplePaymentType"), type.includes("income") ? "Choose the payment or remittance type before saving." : "Choose the payment method or expense type before saving."]
   ];
   for (const [field, message] of required) {
     if (!field.value.trim()) {
@@ -1206,6 +1546,11 @@ function validateSimpleEntry() {
       return false;
     }
   }
+  if (!validMoneyValue($("simpleAmount").value)) {
+    toast("Enter the dollar amount exactly, such as 4000 or 4000.00.");
+    $("simpleAmount").focus();
+    return false;
+  }
   const dateCheck = dateMatchesTaxYear($("simpleDate").value, $("taxYear").value);
   if (!dateCheck.ok) {
     toast(dateCheck.message);
@@ -1213,14 +1558,26 @@ function validateSimpleEntry() {
     return false;
   }
   const giftContext = updateGiftReviewUI(type, `${$("simpleWhat").value} ${$("simplePurpose").value}`.toLowerCase());
-  if (type === "noncash_income" && giftContext.direction === "received" && !$("giftExchangeStatus").value) {
-    toast("Answer whether the gift/barter was received because of content, promotion, review, or services.");
-    $("giftExchangeStatus").focus();
+  if (type === "cash_income" && paymentValue === "crypto_business") {
+    if (!$("cryptoBusinessStatus").value) {
+      toast("Answer whether the crypto was received for this business.");
+      $("cryptoBusinessStatus").focus();
+      return false;
+    }
+    if ($("cryptoBusinessStatus").value !== "yes") {
+      toast("Personal, investment, or unsure crypto is not added to this business profit/loss. Save only business payments here.");
+      $("cryptoBusinessStatus").focus();
+      return false;
+    }
+  }
+  if ((type === "noncash_income" || paymentValue === "product_gift_barter") && !$("simpleWhat").value.trim()) {
+    toast("Add what gift, product, trip, service, or barter item was received.");
+    $("simpleWhat").focus();
     return false;
   }
-  if (!type.includes("income") && !inferLineFrom(type, $("simpleWhat").value, $("simplePurpose").value)) {
-    toast("Tell us what this expense was for before saving so it does not default to Other.");
-    $("simpleWhat").focus();
+  if ((type === "noncash_income" || paymentValue === "product_gift_barter") && giftContext.direction === "received" && !$("giftExchangeStatus").value) {
+    toast("Answer whether the gift/barter was received because of content, promotion, review, or services.");
+    $("giftExchangeStatus").focus();
     return false;
   }
   return true;
@@ -1236,7 +1593,7 @@ function editBusinessRecord(id) {
   delete $("businessType").dataset.autoFilled;
   $("businessDescription").value = business.description || "";
   $("businessActive").checked = Boolean(business.active);
-  document.querySelector('[data-view="businesses"]').click();
+  showView("businesses", "Business Setup", "Add or edit the business/activity before recording income and expenses.");
 }
 
 function resetBusinessForm() {
@@ -1245,13 +1602,14 @@ function resetBusinessForm() {
   $("businessId").value = "";
   delete $("businessType").dataset.autoFilled;
   $("businessActive").checked = true;
-  document.querySelector('[data-view="businesses"]').click();
+  showView("businesses", "Business Setup", "Add or edit the business/activity before recording income and expenses.");
   setTimeout(() => $("businessName").focus(), 30);
 }
 
-async function refresh() {
-  selectedTaxYearMemory = selectedTaxYearMemory || $("taxYear")?.value || "";
-  selectedBusinessMemory = selectedBusinessMemory || $("businessFilter")?.value || "";
+async function refresh(options = {}) {
+  const preserveSelection = options.preserveSelection !== false;
+  selectedTaxYearMemory = preserveSelection ? selectedTaxYearMemory || $("taxYear")?.value || "" : "";
+  selectedBusinessMemory = preserveSelection ? selectedBusinessMemory || $("businessFilter")?.value || "" : "";
   state = await api("/api/bootstrap");
   renderTaxYears();
   renderLineOptions();
@@ -1276,24 +1634,43 @@ function toast(text) {
   setTimeout(() => $("toast").style.display = "none", 2400);
 }
 
+function showView(view, title, subtitle) {
+  document.body.classList.remove("landing-active");
+  document.querySelectorAll(".nav").forEach(item => {
+    item.classList.toggle("active", item.dataset.view === view);
+  });
+  document.querySelectorAll(".view").forEach(item => item.classList.remove("active"));
+  $(view).classList.add("active");
+  document.body.dataset.view = view;
+  if (title) $("viewTitle").textContent = title;
+  if (subtitle) $("viewSub").textContent = subtitle;
+}
+
+function enterApp(view = "dashboard") {
+  const labels = {
+    dashboard: ["Home", "Choose the business and tax year, then add records as money moves."],
+    records: ["Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context."],
+    factors: ["Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected."],
+    imports: ["More", "Optional import, export, reset, and advanced tools."]
+  };
+  const selected = labels[view] || labels.dashboard;
+  showView(view, selected[0], selected[1]);
+}
+
 document.querySelectorAll(".nav").forEach(button => {
   button.addEventListener("click", () => {
-    document.querySelectorAll(".nav").forEach(item => item.classList.remove("active"));
-    document.querySelectorAll(".view").forEach(item => item.classList.remove("active"));
-    button.classList.add("active");
-    $(button.dataset.view).classList.add("active");
     const labels = {
-      dashboard: ["Dashboard", "See real-time profit or loss for the selected tax year."],
-      businesses: ["Businesses", "Separate each business/activity so records and profit-motive analysis stay clean."],
-      records: ["Records", "Capture income, outlays, receipts, proof, gifts/barter, crypto, and edit history."],
-      factors: ["Profit Review", "Answer the profit motive factors after a 3-out-of-5 loss pattern appears."],
-      imports: ["Batch Import", "Bring in rows from platforms, wallets, banks, or spreadsheets."],
-      settings: ["White Label", "Customize the app for Tina Your Tax Bestie LLC or another partner."]
+      dashboard: ["Home", "Choose the business and tax year, then add records as money moves."],
+      records: ["Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context."],
+      factors: ["Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected."],
+      imports: ["More", "Optional import, export, reset, and advanced tools."]
     };
-    $("viewTitle").textContent = labels[button.dataset.view][0];
-    $("viewSub").textContent = labels[button.dataset.view][1];
+    showView(button.dataset.view, labels[button.dataset.view][0], labels[button.dataset.view][1]);
   });
 });
+
+$("enterApp").addEventListener("click", () => enterApp("dashboard"));
+$("previewApp").addEventListener("click", () => enterApp("records"));
 
 ["recordType", "recordCategory", "description"].forEach(id => {
   $(id).addEventListener("input", () => updateLineSuggestion(false));
@@ -1306,6 +1683,8 @@ document.querySelectorAll(".nav").forEach(button => {
   $(id).addEventListener("keyup", updateSimpleMappingPreview);
   $(id).addEventListener("blur", updateSimpleMappingPreview);
 });
+$("simplePaymentType").addEventListener("change", updateSimpleMappingPreview);
+$("cryptoBusinessStatus").addEventListener("change", updateSimpleMappingPreview);
 $("giftExchangeStatus").addEventListener("change", updateSimpleMappingPreview);
 $("simpleBusinessSearch").addEventListener("input", updateBusinessSuggestHint);
 $("simpleBusinessSearch").addEventListener("change", () => applyBusinessSuggestionToInput("simpleBusinessSearch"));
@@ -1345,6 +1724,18 @@ $("openAdvancedForm").addEventListener("click", () => {
   $("openAdvancedForm").textContent = $("recordForm").classList.contains("advanced-hidden") ? "Use Advanced Fields" : "Hide Advanced Fields";
 });
 $("clearSimpleForm").addEventListener("click", clearSimpleEntryFields);
+$("addMoreEntry").addEventListener("click", () => {
+  $("postSavePanel")?.classList.add("field-hidden");
+  clearSimpleEntryFields();
+  setTimeout(() => $("simpleDate").focus(), 50);
+});
+$("completeYearReview").addEventListener("click", () => {
+  $("postSavePanel")?.classList.add("field-hidden");
+  showView("records", "Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context.");
+  renderRecords();
+  renderAudit();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
 
 document.querySelectorAll("[data-allocation]").forEach(button => {
   button.addEventListener("click", () => {
@@ -1354,7 +1745,7 @@ document.querySelectorAll("[data-allocation]").forEach(button => {
 
 document.querySelectorAll("[data-quick-type]").forEach(button => {
   button.addEventListener("click", () => {
-    document.querySelector('[data-view="records"]').click();
+    showView("capture", "Add Record", "Save one income, expense, product/gift/barter, or business crypto payment.");
     resetSimpleForm();
     setSimpleType(button.dataset.quickType);
   });
@@ -1362,35 +1753,57 @@ document.querySelectorAll("[data-quick-type]").forEach(button => {
 
 if ($("resetWalkthroughBtn")) {
   $("resetWalkthroughBtn").addEventListener("click", async () => {
-    const confirmText = prompt("This clears businesses, records, profit review answers, and recordkeeping history for a fresh walkthrough. Type RESET to continue.");
+    const confirmText = prompt("This clears saved businesses, records, receipts, profit review answers, and recordkeeping history from this app. Type RESET to continue.");
     if (confirmText !== "RESET") {
       toast("Reset canceled.");
       return;
     }
-    await api("/api/reset", { method: "POST", body: JSON.stringify({ confirm: "RESET" }) });
-    selectedBusinessMemory = "";
-    selectedTaxYearMemory = "";
-    await refresh();
-    toast("Walkthrough data cleared.");
+    try {
+      await api("/api/reset", { method: "POST", body: JSON.stringify({ confirm: "RESET" }) });
+      selectedBusinessMemory = "";
+      selectedTaxYearMemory = "";
+      if ($("showAllYears")) $("showAllYears").checked = false;
+      if ($("showDeleted")) $("showDeleted").checked = false;
+      await refresh({ preserveSelection: false });
+      toast("Data cleared.");
+    } catch (error) {
+      toast(errorMessage(error));
+    }
   });
 }
 
 $("addRecordBtn").addEventListener("click", () => {
-  document.querySelector('[data-view="records"]').click();
+  showView("capture", "Add Record", "Save one income, expense, product/gift/barter, or business crypto payment.");
   resetSimpleForm();
   setTimeout(() => $("simpleAmount").focus(), 50);
 });
 
 $("taxYear").addEventListener("change", () => {
   selectedTaxYearMemory = $("taxYear").value;
+  profitReviewSubmitted = false;
   $("recordTaxYear").value = $("taxYear").value;
+  setDateBoundsForTaxYear();
+  clearMismatchedDate("simpleDate");
+  clearMismatchedDate("recordDate");
   updateExportLink();
   renderDashboard();
   renderRecords();
+  renderAudit();
   renderFactors();
 });
 
+$("simpleDate").addEventListener("change", () => clearMismatchedDate("simpleDate"));
+$("recordDate").addEventListener("change", () => clearMismatchedDate("recordDate", $("recordTaxYear").value || $("taxYear").value));
+$("recordTaxYear").addEventListener("change", () => {
+  if ($("recordTaxYear").value) {
+    $("recordDate").min = `${$("recordTaxYear").value}-01-01`;
+    $("recordDate").max = `${$("recordTaxYear").value}-12-31`;
+  }
+  clearMismatchedDate("recordDate", $("recordTaxYear").value);
+});
+
 $("businessFilter").addEventListener("change", () => {
+  profitReviewSubmitted = false;
   if ($("businessFilter").value === "__new__") {
     selectedBusinessMemory = "";
     $("businessFilter").value = "";
@@ -1410,13 +1823,18 @@ $("businessFilter").addEventListener("change", () => {
   $("simpleBusiness").value = $("businessFilter").value;
   updateBusinessSearchFromSelect();
   updateExportLink();
+  updateTaxYearRangeHelp();
   renderDashboard();
   renderRecords();
+  renderAudit();
   renderFactors();
 });
 
 $("showDeleted").addEventListener("change", renderRecords);
-$("showAllYears").addEventListener("change", renderRecords);
+$("showAllYears").addEventListener("change", () => {
+  renderRecords();
+  renderAudit();
+});
 $("resetForm").addEventListener("click", resetForm);
 
 $("recordForm").addEventListener("submit", async (event) => {
@@ -1442,11 +1860,20 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!validateSimpleEntry()) return;
   const type = $("simpleType").value;
-  const category = $("simpleWhat").value.trim();
-  const description = $("simplePurpose").value.trim();
+  const paymentValue = $("simplePaymentType").value;
+  const derivedType = type === "cash_income" && paymentValue === "crypto_business"
+    ? "crypto_income"
+    : type === "cash_income" && paymentValue === "product_gift_barter"
+      ? "noncash_income"
+      : type;
+  const whatValue = $("simpleWhat").value.trim();
+  const purposeValue = $("simplePurpose").value.trim();
+  const paymentText = paymentTypeLabel(type, paymentValue);
+  const category = whatValue || (derivedType.includes("income") ? paymentText || "Income" : type === "cash_expense" || type === "crypto_expense" ? "Needs info" : "Needs info");
+  const description = purposeValue || (derivedType.includes("income") ? paymentText : "");
   const giftContext = updateGiftReviewUI(type, `${category} ${description}`.toLowerCase());
   const giftStatus = $("giftExchangeStatus").value;
-  const paymentText = paymentTypeLabel(type, $("simplePaymentType").value);
+  const cryptoStatus = $("cryptoBusinessStatus")?.value || "";
   const giftStatusText = giftContext.direction === "given" ? {
     yes: "Promo gift/giveaway question: Yes, item was given for business promotion/content/services.",
     no: "Promo gift/giveaway question: No, ordinary expense only.",
@@ -1457,9 +1884,10 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
     unsure: "Gift/product question: Not sure; review needed with a qualified tax professional.",
   }[giftStatus] || "";
   const file = await readFileInput("simpleEvidenceFile");
-  const needsAssetReview = giftStatus === "unsure" || category.toLowerCase().match(/computer|camera|mic|microphone|phone|equipment|laptop/);
-  const fmvMethod = type === "noncash_income" || type.includes("crypto") || giftStatus === "yes" || giftStatus === "unsure"
-    ? `${fmvEvidenceText} ${giftStatusText}`.trim()
+  const needsAssetReview = cryptoStatus === "yes" || giftStatus === "unsure" || category.toLowerCase().match(/computer|camera|mic|microphone|phone|equipment|laptop/);
+  const cryptoText = cryptoStatus === "yes" ? "Crypto question: Yes, received as a business payment. USD FMV at receipt included in business income. Later sale/spend gain-loss is outside this MVP and should be reviewed with a qualified tax professional." : "";
+  const fmvMethod = derivedType === "noncash_income" || derivedType.includes("crypto") || giftStatus === "yes" || giftStatus === "unsure"
+    ? `${fmvEvidenceText} ${giftStatusText} ${cryptoText}`.trim()
     : "";
   try {
     const keepType = type;
@@ -1467,23 +1895,23 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
     const businessId = await ensureSimpleBusiness();
     const payload = {
       business_id: businessId,
-      record_type: type,
+      record_type: derivedType,
       tax_year: $("taxYear").value,
       event_date: $("simpleDate").value,
-      amount_usd: $("simpleAmount").value,
+      amount_usd: moneyFieldValue("simpleAmount"),
       allocation_percent: 100,
-      asset_review: giftStatus === "unsure" ? "review_needed" : needsAssetReview ? "possible_depreciation" : "not_needed",
+      asset_review: cryptoStatus === "yes" || giftStatus === "unsure" ? "review_needed" : needsAssetReview ? "possible_depreciation" : "not_needed",
       shared_use_note: "",
       category,
       description,
-      schedule_line: inferLineFrom(type, category, description),
-      counterparty: $("simpleWho").value,
+      schedule_line: (derivedType === "cash_expense" || derivedType === "crypto_expense") && !whatValue ? "needs_info" : inferLineFrom(derivedType, category, description),
+      counterparty: $("simpleWho").value.trim(),
       fmv_method: fmvMethod,
       crypto_asset: "",
       crypto_amount: "",
       crypto_wallet: "",
       transaction_hash: "",
-      evidence_note: [description, paymentText ? `Payment/remittance type: ${paymentText}.` : "", giftStatusText].filter(Boolean).join(" "),
+      evidence_note: [paymentText ? `Payment/remittance type: ${paymentText}.` : "", purposeValue, giftStatusText, cryptoText].filter(Boolean).join(" ") || "Quick capture",
       evidence_file_name: file.name,
       evidence_file_type: file.type,
       evidence_file_data: file.data,
@@ -1499,11 +1927,12 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
     $("businessFilter").value = String(businessId);
     updateBusinessSearchFromSelect();
     clearSimpleEntryFields();
+    showPostSavePanel();
     renderDashboard();
     renderRecords();
     renderFactors();
     updateExportLink();
-    toast("Saved. Add another record when ready.");
+    toast("Saved.");
   } catch (error) {
     toast(errorMessage(error));
   }
@@ -1526,10 +1955,13 @@ document.body.addEventListener("click", async (event) => {
       return;
     }
     if (["records", "factors"].includes(portalAction)) {
-      document.querySelector(`[data-view="${portalAction}"]`).click();
+      const labels = portalAction === "records"
+        ? ["Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context."]
+        : ["Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected."];
+      showView(portalAction, labels[0], labels[1]);
       return;
     }
-    document.querySelector('[data-view="records"]').click();
+    showView("records", "Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context.");
     resetSimpleForm();
     setSimpleType(portalAction === "cash_expense" || portalAction === "cash_income" || portalAction === "noncash_income" ? portalAction : "cash_expense");
     return;
@@ -1537,7 +1969,7 @@ document.body.addEventListener("click", async (event) => {
   if (startReview) {
     profitReviewUnlocked = true;
     renderFactors();
-    document.querySelector('[data-view="factors"]').click();
+    showView("factors", "Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected.");
     toast("Showing the 9-factor educational review for this business.");
   }
   if (edit) editRecord(edit);
