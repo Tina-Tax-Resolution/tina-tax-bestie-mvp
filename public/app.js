@@ -1056,6 +1056,7 @@ async function saveWizardRecord() {
   renderRecords();
   renderFactors();
   showPostSavePanel();
+  clearSavedWizardEntry();
   toast(isGiftReviewOnly ? "Saved as Review Needed. It is not counted in income or profit/loss yet." : "Saved.");
 }
 
@@ -1402,9 +1403,10 @@ function downloadLocalCsv(path) {
   const { searchParams } = parseLocalPath(path);
   const taxYear = searchParams.get("tax_year");
   const businessId = searchParams.get("business_id");
+  const selectedName = businessId ? normalizeBusinessText(store.businesses.find(business => Number(business.id) === Number(businessId))?.name || "") : "";
   const rows = store.entries.filter(entry =>
     (!taxYear || String(entry.tax_year) === String(taxYear)) &&
-    (!businessId || String(entry.business_id) === String(businessId))
+    (!businessId || String(entry.business_id) === String(businessId) || (selectedName && normalizeBusinessText(store.businesses.find(business => Number(business.id) === Number(entry.business_id))?.name || "") === selectedName))
   );
   const fields = ["id", "business_id", "record_type", "tax_year", "event_date", "amount_usd", "allocation_percent", "asset_review", "shared_use_note", "category", "description", "schedule_line", "counterparty", "fmv_method", "evidence_note", "source", "created_at", "updated_at", "deleted_at"];
   const csv = [fields.join(","), ...rows.map(row => fields.map(field => `"${String(row[field] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
@@ -1435,9 +1437,12 @@ async function localApi(path, options = {}) {
   }
   if (method === "POST" && pathname === "/api/businesses") {
     const stamp = nowLocalIso();
+    const requestedName = String(body.name || "").trim() || "Business Activity";
+    const existing = store.businesses.find(business => normalizeBusinessText(business.name) === normalizeBusinessText(requestedName));
+    if (existing) return existing;
     const business = {
       id: nextLocalId(store.businesses),
-      name: String(body.name || "").trim() || "Business Activity",
+      name: requestedName,
       entity_type: String(body.entity_type || "").trim(),
       description: String(body.description || "").trim(),
       active: body.active === false ? 0 : 1,
@@ -1565,9 +1570,22 @@ function activeEntries() {
   });
 }
 
-function entriesForYear(year = $("taxYear").value, businessId = selectedBusinessId()) {
+function businessKeyForId(id) {
+  const business = state.businesses.find(item => Number(item.id) === Number(id));
+  return normalizeBusinessText(business?.name || "");
+}
+
+function entryBelongsToBusiness(entry, businessId = selectedBusinessId()) {
   const selected = Number(businessId || 0);
-  return state.entries.filter(entry => selected && Number(entry.business_id || 0) === selected && !entry.deleted_at && String(entry.tax_year) === String(year));
+  if (!selected) return false;
+  if (Number(entry.business_id || 0) === selected) return true;
+  const selectedKey = businessKeyForId(selected);
+  const entryKey = businessKeyForId(entry.business_id);
+  return Boolean(selectedKey && entryKey && selectedKey === entryKey);
+}
+
+function entriesForYear(year = $("taxYear").value, businessId = selectedBusinessId()) {
+  return state.entries.filter(entry => entryBelongsToBusiness(entry, businessId) && !entry.deleted_at && String(entry.tax_year) === String(year));
 }
 
 function selectedBusinessId() {
@@ -1575,9 +1593,7 @@ function selectedBusinessId() {
 }
 
 function entryMatchesBusiness(entry) {
-  const selected = selectedBusinessId();
-  if (!selected) return false;
-  return Number(entry.business_id || 0) === selected;
+  return entryBelongsToBusiness(entry);
 }
 
 function businessName(id) {
@@ -1618,9 +1634,8 @@ function totals(year = $("taxYear").value, businessId = selectedBusinessId()) {
 }
 
 function yearResults(businessId = selectedBusinessId()) {
-  const selected = Number(businessId || 0);
   const grouped = {};
-  state.entries.filter(e => selected && !e.deleted_at && Number(e.business_id || 0) === selected).forEach(entry => {
+  state.entries.filter(entry => entryBelongsToBusiness(entry, businessId) && !entry.deleted_at).forEach(entry => {
     grouped[entry.tax_year] ||= { income: 0, expenses: 0 };
     grouped[entry.tax_year][isIncome(entry) ? "income" : "expenses"] += Number(entry.amount_usd || 0);
   });
@@ -2725,6 +2740,28 @@ function showPostSavePanel() {
   if ($("wizardPostSaveText")) $("wizardPostSaveText").textContent = `Saved ${typeText} for ${business} in TY ${year}. ${crossPrompt}`;
   if ($("postSaveText")) $("postSaveText").textContent = `Add another item for ${business} in ${year}, or complete the tax-year review.`;
   panel.classList.remove("field-hidden");
+}
+
+function clearSavedWizardEntry({ keepType = "" } = {}) {
+  recordWizard = {
+    step: keepType ? 1 : 0,
+    businessId: $("businessFilter")?.value || recordWizard.businessId || "",
+    businessName: $("businessFilter")?.value ? businessName($("businessFilter").value) : recordWizard.businessName,
+    type: keepType,
+    payment: "",
+    date: "",
+    dateMonth: "",
+    dateDay: "",
+    amount: "",
+    what: "",
+    who: "",
+    giftStatus: "",
+    proofChoice: "",
+    proofName: "",
+    proofType: "",
+    proofData: ""
+  };
+  renderRecordWizard();
 }
 
 function validateSimpleEntry() {
