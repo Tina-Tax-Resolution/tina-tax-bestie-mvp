@@ -127,6 +127,8 @@ const paymentTypeOptions = {
 };
 
 let state = { settings: {}, businesses: [], entries: [], factors: [], audit: [] };
+const localStoreKey = "taxBestieLocalDemoV1";
+let localDemoMode = window.location.protocol === "file:";
 let evidenceFilePayload = { name: "", type: "", data: "" };
 let profitReviewUnlocked = false;
 let profitReviewSubmitted = false;
@@ -1288,21 +1290,248 @@ function updateFmvHelp(type, context, giftStatus) {
   help.classList.toggle("field-hidden", !show);
 }
 
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
+function defaultLocalState() {
+  return {
+    settings: {
+      brand_name: "Tina Your Tax Bestie LLC",
+      advisor_name: "",
+      advisor_contact: "",
+      accent_color: "#227c73",
+      current_tax_year: new Date().getFullYear(),
+      disclaimer: "Educational and record-organization purposes only. Not legal, tax, accounting, or Circular 230 written tax advice. Consult a qualified tax professional before filing or taking any tax position."
+    },
+    businesses: [],
+    entries: [],
+    factors: [],
+    audit: []
+  };
+}
+
+function loadLocalState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(localStoreKey) || "null");
+    return saved && typeof saved === "object" ? { ...defaultLocalState(), ...saved } : defaultLocalState();
+  } catch {
+    return defaultLocalState();
+  }
+}
+
+function saveLocalState(nextState) {
+  localStorage.setItem(localStoreKey, JSON.stringify(nextState));
+}
+
+function nextLocalId(rows) {
+  return rows.reduce((max, row) => Math.max(max, Number(row.id || 0)), 0) + 1;
+}
+
+function nowLocalIso() {
+  return new Date().toISOString();
+}
+
+function auditLocal(store, entryId, action, reason, before = null, after = null) {
+  store.audit.unshift({
+    id: nextLocalId(store.audit),
+    entry_id: entryId || "",
+    action,
+    reason: reason || "",
+    before_json: before ? JSON.stringify(before) : "",
+    after_json: after ? JSON.stringify(after) : "",
+    created_at: nowLocalIso()
   });
-  if (!response.ok) {
-    const text = await response.text();
-    try {
-      const parsed = JSON.parse(text);
-      throw new Error(parsed.error || "Request failed");
-    } catch {
-      throw new Error(response.status === 401 ? "Authentication required" : text || "Request failed");
+  store.audit = store.audit.slice(0, 200);
+}
+
+function normalizeLocalEntry(payload, id = null) {
+  const stamp = nowLocalIso();
+  return {
+    id: id || Number(payload.id || 0) || 0,
+    business_id: Number(payload.business_id || 0),
+    record_type: payload.record_type || "cash_expense",
+    tax_year: Number(payload.tax_year || new Date().getFullYear()),
+    event_date: payload.event_date || `${payload.tax_year || new Date().getFullYear()}-01-01`,
+    amount_usd: Number(payload.amount_usd || 0),
+    allocation_percent: Number(payload.allocation_percent || 100),
+    asset_review: payload.asset_review || "not_needed",
+    shared_use_note: payload.shared_use_note || "",
+    category: payload.category || "",
+    description: payload.description || "",
+    schedule_line: payload.schedule_line || "",
+    counterparty: payload.counterparty || "",
+    fmv_method: payload.fmv_method || "",
+    crypto_asset: payload.crypto_asset || "",
+    crypto_amount: payload.crypto_amount || "",
+    crypto_wallet: payload.crypto_wallet || "",
+    transaction_hash: payload.transaction_hash || "",
+    evidence_note: payload.evidence_note || "",
+    evidence_file_name: payload.evidence_file_name || "",
+    evidence_file_type: payload.evidence_file_type || "",
+    evidence_file_data: payload.evidence_file_data || "",
+    source: payload.source || "local_demo",
+    created_at: payload.created_at || stamp,
+    updated_at: stamp,
+    deleted_at: payload.deleted_at || ""
+  };
+}
+
+function parseLocalPath(path) {
+  const url = new URL(path, window.location.origin || "http://local-demo");
+  return { pathname: url.pathname, searchParams: url.searchParams };
+}
+
+function downloadLocalCsv(path) {
+  const store = loadLocalState();
+  const { searchParams } = parseLocalPath(path);
+  const taxYear = searchParams.get("tax_year");
+  const businessId = searchParams.get("business_id");
+  const rows = store.entries.filter(entry =>
+    (!taxYear || String(entry.tax_year) === String(taxYear)) &&
+    (!businessId || String(entry.business_id) === String(businessId))
+  );
+  const fields = ["id", "business_id", "record_type", "tax_year", "event_date", "amount_usd", "allocation_percent", "asset_review", "shared_use_note", "category", "description", "schedule_line", "counterparty", "fmv_method", "evidence_note", "source", "created_at", "updated_at", "deleted_at"];
+  const csv = [fields.join(","), ...rows.map(row => fields.map(field => `"${String(row[field] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "tax-bestie-records.csv";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 500);
+}
+
+async function localApi(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const body = options.body ? JSON.parse(options.body) : {};
+  const store = loadLocalState();
+  const { pathname, searchParams } = parseLocalPath(path);
+  localDemoMode = true;
+
+  if (method === "GET" && pathname === "/api/bootstrap") {
+    return store;
+  }
+  if (method === "POST" && pathname === "/api/entries") {
+    const entry = normalizeLocalEntry(body, nextLocalId(store.entries));
+    store.entries.push(entry);
+    auditLocal(store, entry.id, "create", body.reason || "Saved in demo storage", null, entry);
+    saveLocalState(store);
+    return entry;
+  }
+  if (method === "POST" && pathname === "/api/businesses") {
+    const stamp = nowLocalIso();
+    const business = {
+      id: nextLocalId(store.businesses),
+      name: String(body.name || "").trim() || "Business Activity",
+      entity_type: String(body.entity_type || "").trim(),
+      description: String(body.description || "").trim(),
+      active: body.active === false ? 0 : 1,
+      created_at: stamp,
+      updated_at: stamp
+    };
+    store.businesses.push(business);
+    saveLocalState(store);
+    return business;
+  }
+  if (method === "POST" && pathname === "/api/reset") {
+    if (body.confirm !== "RESET") throw new Error("Type RESET to clear saved data.");
+    const fresh = defaultLocalState();
+    saveLocalState(fresh);
+    return { ok: true, message: "Saved demo data cleared." };
+  }
+  if (method === "POST" && pathname === "/api/import.csv") {
+    throw new Error("CSV import needs the hosted backend. Use manual entry for this local demo.");
+  }
+  if (method === "PUT" && pathname === "/api/settings") {
+    store.settings = { ...store.settings, ...body };
+    saveLocalState(store);
+    return store.settings;
+  }
+  if (method === "PUT" && pathname === "/api/factors") {
+    const businessId = Number(body.business_id || 0);
+    store.factors = store.factors.filter(factor => Number(factor.business_id) !== businessId);
+    for (const item of body.factors || []) {
+      store.factors.push({
+        id: nextLocalId(store.factors),
+        business_id: businessId,
+        factor_no: Number(item.factor_no),
+        answer: item.answer || "mixed",
+        note: item.note || "",
+        updated_at: nowLocalIso()
+      });
+    }
+    saveLocalState(store);
+    return { ok: true };
+  }
+
+  const entryMatch = pathname.match(/^\/api\/entries\/(\d+)(?:\/restore)?$/);
+  if (entryMatch) {
+    const entryId = Number(entryMatch[1]);
+    const index = store.entries.findIndex(entry => Number(entry.id) === entryId);
+    if (index < 0) throw new Error("Record not found");
+    const before = { ...store.entries[index] };
+    if (method === "PUT" && pathname.endsWith("/restore")) {
+      store.entries[index] = { ...store.entries[index], deleted_at: "", updated_at: nowLocalIso() };
+      auditLocal(store, entryId, "restore", "Record restored", before, store.entries[index]);
+      saveLocalState(store);
+      return store.entries[index];
+    }
+    if (method === "PUT") {
+      store.entries[index] = normalizeLocalEntry({ ...body, created_at: before.created_at, deleted_at: before.deleted_at }, entryId);
+      auditLocal(store, entryId, "edit", body.reason || "Record edited", before, store.entries[index]);
+      saveLocalState(store);
+      return store.entries[index];
+    }
+    if (method === "DELETE") {
+      store.entries[index] = { ...store.entries[index], deleted_at: nowLocalIso(), updated_at: nowLocalIso() };
+      auditLocal(store, entryId, "soft_delete", searchParams.get("reason") || "Soft deleted by user", before, store.entries[index]);
+      saveLocalState(store);
+      return store.entries[index];
     }
   }
-  return response.json();
+
+  const businessMatch = pathname.match(/^\/api\/businesses\/(\d+)$/);
+  if (method === "PUT" && businessMatch) {
+    const businessId = Number(businessMatch[1]);
+    const index = store.businesses.findIndex(business => Number(business.id) === businessId);
+    if (index < 0) throw new Error("Business not found");
+    store.businesses[index] = {
+      ...store.businesses[index],
+      name: String(body.name || "").trim() || "Business Activity",
+      entity_type: String(body.entity_type || "").trim(),
+      description: String(body.description || "").trim(),
+      active: body.active === false ? 0 : 1,
+      updated_at: nowLocalIso()
+    };
+    saveLocalState(store);
+    return store.businesses[index];
+  }
+
+  throw new Error("This action needs the hosted backend.");
+}
+
+async function api(path, options = {}) {
+  if (localDemoMode) {
+    return localApi(path, options);
+  }
+  try {
+    const response = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      try {
+        const parsed = JSON.parse(text);
+        throw new Error(parsed.error || "Request failed");
+      } catch {
+        throw new Error(response.status === 401 ? "Authentication required" : text || "Request failed");
+      }
+    }
+    return response.json();
+  } catch (error) {
+    if (path === "/api/bootstrap" || error instanceof TypeError || /Failed to fetch|Load failed|NetworkError|Authentication required/i.test(error.message || "")) {
+      localDemoMode = true;
+      return localApi(path, options);
+    }
+    throw error;
+  }
 }
 
 function errorMessage(error) {
@@ -1865,6 +2094,15 @@ function updateExportLink() {
   link.textContent = $("taxYear")?.value ? `Export ${$("taxYear").value} CSV` : "Export CSV";
 }
 
+function renderStorageModeNotice() {
+  const side = $("sideDisclaimer");
+  if (!side) return;
+  const base = state.settings.disclaimer || defaultLocalState().settings.disclaimer;
+  side.textContent = localDemoMode
+    ? `${base} Demo storage is active because the backend is not connected. Use hosted Render storage for real saved records.`
+    : base;
+}
+
 function findBusinessSuggestion(text) {
   const query = normalizeBusinessText(text);
   if (!query) return null;
@@ -2222,6 +2460,7 @@ async function saveProfitReview(options = {}) {
 
 function renderAll() {
   renderSettings();
+  renderStorageModeNotice();
   renderBusinesses();
   renderDashboard();
   renderRecords();
@@ -3146,8 +3385,20 @@ $("importBtn").addEventListener("click", async () => {
   toast("CSV imported.");
 });
 
-refresh().catch(error => {
-  document.body.innerHTML = `<main style="padding:24px"><h1>Backend not running</h1><p>Start the local MVP server first, then open the localhost URL.</p><pre>${escapeHtml(error.message)}</pre></main>`;
+$("exportSelectedYear")?.addEventListener("click", (event) => {
+  if (!localDemoMode) return;
+  event.preventDefault();
+  downloadLocalCsv($("exportSelectedYear").getAttribute("href") || "/api/export.csv");
+});
+
+refresh().catch(async (error) => {
+  localDemoMode = true;
+  try {
+    await refresh({ preserveSelection: false });
+    toast("Backend not connected. Demo storage is active in this browser.");
+  } catch {
+    document.body.innerHTML = `<main style="padding:24px"><h1>Tax Bestie could not open</h1><p>The backend is not connected and browser demo storage could not start.</p><pre>${escapeHtml(error.message)}</pre></main>`;
+  }
 });
 
 if ("serviceWorker" in navigator) {
