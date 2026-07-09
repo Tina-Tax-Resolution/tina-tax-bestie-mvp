@@ -675,9 +675,9 @@ function selectedYearTotalsStrip(businessId = wizardBusinessIdForTotals()) {
       : "";
   return `<div class="year-total-strip">
     <div><span>Selected file</span><strong>TY ${escapeHtml(year)}</strong></div>
-    <div><span>Saved income</span><strong>${money.format(t.income)}</strong></div>
-    <div><span>Saved expenses</span><strong>${money.format(t.expenses)}</strong></div>
-    <div><span>Current result</span><strong class="${t.net < 0 ? "loss-text" : t.net > 0 ? "profit-text" : ""}">${resultLabel(t.net)}</strong></div>
+    <div><span>Saved completed income</span><strong>${money.format(t.income)}</strong></div>
+    <div><span>Saved completed expenses</span><strong>${money.format(t.expenses)}</strong></div>
+    <div><span>Current saved result</span><strong class="${t.net < 0 ? "loss-text" : t.net > 0 ? "profit-text" : ""}">${resultLabel(t.net)}</strong></div>
     <div><span>5-year watch</span><strong>${escapeHtml(lossText)}</strong></div>
   </div>${alertText}`;
 }
@@ -716,7 +716,7 @@ function wizardLivePreviewHtml() {
             ? "personal gift note"
             : "record";
   const countText = impact.counts
-    ? `If completed now, this ${typeText} changes the selected year to ${money.format(afterNet)}.`
+    ? `This ${typeText} is not counted yet. It will be included after you finish the review step and click Complete & Save Record.`
     : recordWizard.type === "noncash_income" && recordWizard.giftStatus
       ? `This ${typeText} is not counted in profit/loss yet. It stays in the file for review.`
       : "Enter the amount or FMV to see the live profit/loss impact before saving.";
@@ -728,9 +728,9 @@ function wizardLivePreviewHtml() {
   const expenseNote = recordWizard.type === "cash_expense"
     ? expenseReviewNote(expenseReviewSignals(recordWizard.what.toLowerCase()), impact.amount, recordWizard.what).map(note => `<li>${escapeHtml(note)}</li>`).join("")
     : "";
-  return `${selectedYearTotalsStrip(wizardBusinessIdForTotals())}<div class="live-preview-grid">
-    <div><span>Already saved for TY ${escapeHtml($("taxYear").value)}</span><strong>${money.format(t.net)}</strong><small>Income ${money.format(t.income)} | Expenses ${money.format(t.expenses)}</small></div>
-    <div><span>This entry</span><strong>${impact.counts ? money.format(impact.amount) : "Review only"}</strong><small>${escapeHtml(typeText)}</small></div>
+  return `${selectedYearTotalsStrip(wizardBusinessIdForTotals())}<div class="alert compact-alert"><strong>Not saved yet:</strong> The entry you are typing is only a preview until you reach Review and click Complete & Save Record.</div><div class="live-preview-grid">
+    <div><span>Completed records saved for TY ${escapeHtml($("taxYear").value)}</span><strong>${money.format(t.net)}</strong><small>Saved income ${money.format(t.income)} | Saved expenses ${money.format(t.expenses)}</small></div>
+    <div><span>This unsaved entry</span><strong>${impact.counts ? money.format(impact.amount) : "Review only"}</strong><small>${escapeHtml(typeText)}</small></div>
     <div><span>Projected TY ${escapeHtml($("taxYear").value)} result</span><strong class="${afterNet < 0 ? "loss-text" : afterNet > 0 ? "profit-text" : ""}">${resultLabel(afterNet)}</strong><small>Income ${money.format(afterIncome)} | Expenses ${money.format(afterExpenses)}</small></div>
   </div>
   <div class="calculator-callout ${afterNet < 0 ? "loss" : afterNet > 0 ? "profit" : ""}">
@@ -901,6 +901,9 @@ function renderRecordWizard() {
   card.innerHTML = wizardQuestionHtml(step);
   $("recordWizardBack")?.classList.toggle("field-hidden", recordWizard.step === 0);
   $("recordWizardNext")?.classList.toggle("field-hidden", step === "review");
+  if ($("recordWizardNext")) {
+    $("recordWizardNext").textContent = step === "proofChoice" || step === "proof" ? "Next: Review" : "Next";
+  }
   $("recordWizardSave")?.classList.toggle("field-hidden", step !== "review");
   renderWizardLivePreview();
 }
