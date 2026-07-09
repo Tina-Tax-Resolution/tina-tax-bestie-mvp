@@ -12,16 +12,14 @@ Use Render for the first phone-ready MVP because this app already has:
 - `Procfile`
 - PWA/mobile install files
 
-## Important Security Step
+## Important Security Note
 
-Do not enter real taxpayer/client records unless `APP_PASSWORD` is set.
+This build opens without a username/password pop-up so it is easier to demo. Do not enter sensitive taxpayer/client records until a real account/login system is added.
 
 Render environment variables for durable saved records:
 
 ```text
 DATA_DIR=/var/data
-APP_USER=tina
-APP_PASSWORD=<choose a strong private password>
 ```
 
 If you are using Render free/no-disk mode only for a temporary demo, either remove `DATA_DIR` or set it to:
@@ -32,21 +30,13 @@ DATA_DIR=/tmp/tytb-profit-motive-data
 
 Free/no-disk storage is temporary. Records may reset when the service restarts or redeploys.
 
-When the app opens, the browser will ask for:
-
-```text
-Username: tina
-Password: the value you set for APP_PASSWORD
-```
-
 ## Render Blueprint Option
 
 1. Put this folder in a GitHub repository.
 2. In Render, choose **New** then **Blueprint**.
 3. Connect the GitHub repository.
 4. Render should detect `render.yaml`.
-5. Set `APP_PASSWORD` when prompted.
-6. Deploy.
+5. Deploy.
 
 ## Manual Render Web Service Option
 
@@ -71,8 +61,6 @@ Size: 1 GB
 
 ```text
 DATA_DIR=/var/data
-APP_USER=tina
-APP_PASSWORD=<choose a strong private password>
 ```
 
 6. Deploy.
@@ -82,9 +70,8 @@ APP_PASSWORD=<choose a strong private password>
 After Render gives you an HTTPS link:
 
 1. Open the Render app link on your phone.
-2. Sign in with the app username/password.
-3. On iPhone Safari, tap Share then **Add to Home Screen**.
-4. On Android Chrome, tap the browser menu then **Add to Home screen** or **Install app**.
+2. On iPhone Safari, tap Share then **Add to Home Screen**.
+3. On Android Chrome, tap the browser menu then **Add to Home screen** or **Install app**.
 
 ## Cost Note
 

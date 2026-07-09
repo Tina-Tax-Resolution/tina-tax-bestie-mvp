@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import csv
-import base64
-import hmac
 import io
 import json
 import os
@@ -16,8 +14,6 @@ ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
 DATA = Path(os.environ.get("DATA_DIR", ROOT / "data"))
 DB_PATH = DATA / "tytb_profit_motive.sqlite3"
-APP_USER = os.environ.get("APP_USER", "tina")
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
 
 def now_iso():
@@ -314,28 +310,10 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(PUBLIC), **kwargs)
 
     def authenticate(self):
-        if not APP_PASSWORD:
-            return True
-        header = self.headers.get("Authorization", "")
-        prefix = "Basic "
-        if not header.startswith(prefix):
-            return False
-        try:
-            decoded = base64.b64decode(header[len(prefix):]).decode("utf-8")
-            username, password = decoded.split(":", 1)
-        except Exception:
-            return False
-        return hmac.compare_digest(username, APP_USER) and hmac.compare_digest(password, APP_PASSWORD)
+        return True
 
     def require_auth(self):
-        if self.authenticate():
-            return True
-        self.send_response(401)
-        self.send_header("WWW-Authenticate", 'Basic realm="Tina Your Tax Bestie Records"')
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Password required")
-        return False
+        return True
 
     def log_message(self, fmt, *args):
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -513,7 +491,7 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/reset":
                 payload = read_json(self)
                 if payload.get("confirm") != "RESET":
-                    self.send_error_json("Type RESET to clear the walkthrough data.", 400)
+                    self.send_error_json("Type RESET to clear saved data.", 400)
                     return
                 with connect() as conn:
                     conn.execute("DELETE FROM audit_events")
@@ -529,7 +507,7 @@ class Handler(SimpleHTTPRequestHandler):
                             """,
                             (factor_no, now_iso()),
                         )
-                self.send_json({"ok": True, "message": "Walkthrough data cleared."})
+                self.send_json({"ok": True, "message": "Saved data cleared."})
                 return
             self.send_error_json("Unknown endpoint", 404)
         except ValueError as exc:

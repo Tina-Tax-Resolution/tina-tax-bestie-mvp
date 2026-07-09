@@ -22,7 +22,7 @@ http://127.0.0.1:8765
 
 This MVP is now mobile-ready and PWA-ready for the owner to use as the first real client.
 
-For local testing on a phone, the computer running the server and the phone must be on the same network. Start the server on the computer, then use the computer's local network address from the phone. For real use away from home, deploy the app to a secure hosted environment with login and backups.
+For local testing on a phone, the computer running the server and the phone must be on the same network. Start the server on the computer, then use the computer's local network address from the phone. For real use away from home, deploy the app to a secure hosted environment with proper user accounts and backups.
 
 Phone-focused features:
 
@@ -41,9 +41,9 @@ Why Render first:
 - It can run this Python backend.
 - It supports a persistent disk for the SQLite database.
 - It gives you a phone-accessible HTTPS URL.
-- You can set a private app password before entering real records.
+- It can be opened without a demo password sign-on for incubator presentation and early walkthrough use.
 
-Important: do not host this without setting `APP_PASSWORD`.
+Important: this no-password MVP is for demonstration and controlled testing. Do not enter sensitive taxpayer/client records until a real account/login system is added.
 
 Detailed deployment steps are in `DEPLOY_TO_RENDER.md`.
 
@@ -60,14 +60,7 @@ Detailed deployment steps are in `DEPLOY_TO_RENDER.md`.
    - Size: 1 GB to start
 5. Add environment variables:
    - `DATA_DIR=/var/data`
-   - `APP_USER=tina`
-   - `APP_PASSWORD=<choose a strong private password>`
 6. Deploy, then open the Render URL from your phone.
-
-When the browser asks for a username and password:
-
-- Username: `tina`
-- Password: the value you set for `APP_PASSWORD`
 
 The deployment files included for this are:
 
@@ -86,7 +79,7 @@ data/tytb_profit_motive.sqlite3
 ## MVP Features
 
 - Local SQLite backend for stronger retention than browser-only storage
-- Private hosted access with username/password when `APP_PASSWORD` is set
+- No password pop-up for incubator/demo walkthroughs
 - Clean first-user experience with no preloaded demo income, expenses, or business activity
 - Business/activity typeahead suggestions for common work such as rideshare, delivery, trucking, creator, beauty, music, tax, and freelance services
 - Client Portal mode for novice users to quickly add income, expenses, brand gifts/barter, crypto, and proof

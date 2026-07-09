@@ -7,12 +7,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="TYTB Records">
   <title>Tina Your Tax Bestie Profit Motive MVP</title>
-  <link rel="manifest" href="/manifest.json">
-  <link rel="icon" href="/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/icon.svg">
-  <link rel="stylesheet" href="/styles.css?v=47">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css?v=68">
 </head>
-<body data-view="dashboard" class="landing-active">
+<body class="landing-active" data-view="dashboard">
   <section class="landing" id="landingPage" aria-label="Tax Bestie landing page">
     <div class="landing-bg" aria-hidden="true"></div>
     <div class="landing-content">
@@ -21,18 +21,18 @@
         <span>Tina Your Tax Bestie LLC</span>
       </div>
       <h1>Let Tax Bestie Mind Your Business</h1>
-      <p>Contemporaneous recordkeeping for self-employed creators and small business owners: track income, expenses, products, gifts, and profit/loss by tax year while Tax Bestie watches for Section 183 profit motive concerns.</p>
+      <p>Track money you make, money you spend, and products or gifts you receive. Tax Bestie keeps each year separate and lets you know when your records may need more support.</p>
       <div class="landing-actions">
-        <button class="primary" id="enterApp" type="button">Start Tracking</button>
-        <button class="ghost light" id="previewApp" type="button">Preview Year Review</button>
+        <button class="primary" id="enterApp" type="button">Start My Records</button>
+        <button class="secondary-light" id="previewApp" type="button">See My Progress</button>
       </div>
       <div class="landing-points">
-        <span>Real-time records</span>
-        <span>Schedule C organizer mapping</span>
-        <span>Section 183 3-out-of-5 watch</span>
-        <span>9-question profit motive review</span>
+        <span>Save records as things happen</span>
+        <span>Sort expenses for tax time</span>
+        <span>Watch profit and loss by year</span>
+        <span>Bestie Alerts when records need attention</span>
       </div>
-      <p class="landing-disclaimer">Educational and record-organization purposes only. Not legal, tax, accounting, or Circular 230 written tax advice. The app does not decide whether an activity is a business or hobby and does not determine deductibility. Consult a qualified tax professional before filing or taking any tax position.</p>
+      <p class="landing-disclaimer">Tax Bestie helps organize records. It does not give legal, tax, accounting, or Circular 230 written tax advice. Review with a qualified tax professional before filing or taking any tax position.</p>
     </div>
   </section>
   <div class="app">
@@ -41,13 +41,14 @@
         <div class="logo" aria-hidden="true">TY</div>
         <div>
           <h1 id="brandName">Tina Your Tax Bestie LLC</h1>
-          <p>Profit motive recordkeeping MVP</p>
+          <p>Business records and profit tracker</p>
         </div>
       </div>
       <nav>
         <button class="nav active" data-view="dashboard">Home</button>
-        <button class="nav" data-view="records">Year Review</button>
-        <button class="nav" data-view="factors">Profit Alert</button>
+        <button class="nav" data-view="capture">Add Record</button>
+        <button class="nav" data-view="records">Progress</button>
+        <button class="nav" data-view="factors">Bestie Alert</button>
         <button class="nav" data-view="imports">More</button>
       </nav>
       <div class="notice" id="sideDisclaimer"></div>
@@ -57,13 +58,15 @@
       <header>
         <div>
           <h2 id="viewTitle">Home</h2>
-          <p id="viewSub">Choose the business and tax year, then add records as money moves.</p>
+          <p id="viewSub">Pick your business and year. Then add what came in, what went out, or what you received.</p>
         </div>
         <div class="actions">
           <label class="compact">Business<select id="businessFilter"></select></label>
-          <label class="compact">Tax Year<select id="taxYear"></select></label>
-          <button class="primary" id="addRecordBtn">Add Money / Expense / Product</button>
-          <a class="button ghost" id="exportSelectedYear" href="/api/export.csv">Export Year CSV</a>
+          <label class="compact">Tax Year <button class="info" data-tip="A tax year usually means January 1 through December 31.">i</button><select id="taxYear"></select></label>
+          <button class="primary" id="addRecordBtn" title="Add income, expense, or product/gift for the selected business and tax year.">Add Record</button>
+          <button class="ghost" id="clearEntryTopBtn" type="button" title="Clear the entry you are working on. Saved records stay in place.">Reset Entry</button>
+          <button class="ghost danger" id="resetAllDataTopBtn" type="button">Reset All Data</button>
+          <a class="button ghost" id="exportSelectedYear" href="api/export.csv">Export Year CSV</a>
         </div>
       </header>
 
@@ -72,12 +75,12 @@
           <article class="panel span-12 dashboard-intro">
             <div class="section-title">
               <h3>Start Here</h3>
-              <p class="muted">Choose the business/activity and tax year. Then add income, expenses, or products/gifts as they happen. Tax Bestie organizes records, maps expense categories for Schedule C review, and watches completed-year losses for Section 183 education.</p>
+              <p class="muted">Pick your business and tax year. Then add money made, money spent, or products/gifts received. Tax Bestie sorts the record and watches when the file may need stronger support.</p>
             </div>
             <div class="dashboard-steps">
-              <div><strong>1</strong><span>Select business and tax year at the top.</span></div>
-              <div><strong>2</strong><span>Tap Add Money / Expense / Product.</span></div>
-              <div><strong>3</strong><span>Review profit or loss for the year.</span></div>
+              <div><strong>1</strong><span>Choose the business and year.</span></div>
+              <div><strong>2</strong><span>Tap Add or open Add Record.</span></div>
+              <div><strong>3</strong><span>Review money made, money spent, and profit or loss.</span></div>
             </div>
           </article>
           <article class="panel span-12 install-panel">
@@ -86,13 +89,13 @@
               <p class="muted">This is ready to install after hosting. Open the secure web link on your phone, then choose Add to Home Screen. The local preview works on this computer only.</p>
             </div>
           </article>
-          <article class="metric"><span>Income</span><strong id="incomeTotal">$0</strong></article>
-          <article class="metric warn"><span>Expenses</span><strong id="expenseTotal">$0</strong></article>
-          <article class="metric gold"><span>Net</span><strong id="netTotal">$0</strong></article>
-          <article class="metric blue"><span>5-Year Pattern</span><strong id="profitYears">0 losses</strong></article>
+          <article class="metric"><span>Money made</span><strong id="incomeTotal">$0</strong></article>
+          <article class="metric warn"><span>Money spent</span><strong id="expenseTotal">$0</strong></article>
+          <article class="metric gold"><span>Profit / loss</span><strong id="netTotal">$0</strong></article>
+          <article class="metric blue"><span>5-year lookback</span><strong id="profitYears">0 losses</strong></article>
           <article class="panel span-8">
             <div class="section-title">
-              <h3>Profit Path <button class="info" data-tip="This looks at profit/loss history, whether losses are narrowing, and whether income is improving. It is an educational recordkeeping signal only. Consult a qualified tax professional.">i</button></h3>
+              <h3>Business Progress <button class="info" data-tip="Money made minus money spent by year. This is an educational recordkeeping signal only. Consult a qualified tax professional.">i</button></h3>
             </div>
             <div id="profitAlert"></div>
             <div class="chart" id="yearChart"></div>
@@ -100,7 +103,7 @@
           </article>
           <article class="panel span-4">
             <div class="section-title">
-              <h3>Documentation Completeness <button class="info" data-tip="Educational score based on whether records have dates, amounts, payer/payee details, descriptions, mapping, notes, and supporting files. It measures record completeness only; it does not decide whether a deduction is allowed.">i</button></h3>
+              <h3>Record Strength <button class="info" data-tip="Shows whether records have dates, amounts, receipts, notes, and support. It does not decide tax treatment.">i</button></h3>
             </div>
             <div class="gauge"><div id="scoreBar"></div></div>
             <div class="score" id="score">0%</div>
@@ -118,8 +121,8 @@
             </div>
             <form id="businessForm" class="form-grid">
               <input type="hidden" id="businessId">
-              <label class="span-6">Business / Activity Name<input id="businessName" list="businessSuggestions" required placeholder="Content creator, rideshare driver, delivery shopper"></label>
-              <label class="span-6">Business Type<input id="businessType" required placeholder="Creator, rideshare, delivery, tax practice, LLC"></label>
+              <label class="span-6">Business / Activity Name<input id="businessName" list="businessSuggestions" required placeholder="Type your business or activity"></label>
+              <label class="span-6">Business Type<input id="businessType" required placeholder="Example: creator, rideshare, delivery, professional service"></label>
               <label class="span-12">Description<textarea id="businessDescription" placeholder="What this business/activity does and how it earns income"></textarea></label>
               <label class="span-12 compact"><input type="checkbox" id="businessActive" checked> Active</label>
               <div class="span-12 actions">
@@ -143,21 +146,56 @@
         <div class="grid">
           <article class="panel span-12 capture-setup">
             <div class="section-title">
-              <h3>Step 1: Choose The File</h3>
-              <p class="muted">This uses the business/activity and tax year selected at the top of the screen. You should not need to pick the tax year twice.</p>
+              <h3>Selected Record File</h3>
+              <p class="muted">Use the business and tax year selected at the top. A tax year means January 1 through December 31.</p>
             </div>
             <div id="taxYearRangeHelp" class="tax-year-range">Choose a tax year to see the January 1 through December 31 record period.</div>
           </article>
-          <article class="panel span-12 simple-entry">
+          <article class="panel span-12 record-wizard-panel">
             <div class="section-title">
-              <h3>Step 2: Capture A Record</h3>
-              <p class="muted">Save money received, money spent, or a product/gift/barter item. Add another item or complete the tax-year review after saving.</p>
+              <h3>Guided Record Entry</h3>
+              <p class="muted">Answer one question at a time. Tax Bestie organizes the record and suggests a Schedule C organizer line when needed.</p>
+            </div>
+            <div class="wizard-progress">
+              <div class="progress-meta"><span id="recordWizardStep">Step 1</span><span id="recordWizardPercent">0% complete</span></div>
+              <div class="progress-track"><div class="progress-fill" id="recordWizardFill"></div></div>
+              <div class="progress-steps" id="recordWizardProgressSteps" aria-label="Tax Bestie entry progress"></div>
+            </div>
+            <div class="record-type-tabs" id="recordTypeTabs" aria-label="Choose record type">
+              <button type="button" data-wizard-start-type="cash_income" title="Money made from business activities, including payments, payouts, cash, checks, platform income, and brand deals.">Business Income</button>
+              <button type="button" data-wizard-start-type="cash_expense" title="Money spent to run or operate the business or provide products/services. Tax Bestie suggests a Schedule C organizer line.">Business Expense</button>
+              <button type="button" data-wizard-start-type="noncash_income" title="Non-cash item received in exchange for a service, review, promotion, post, or brand deal.">Product / Gift</button>
+            </div>
+            <div class="wizard-card" id="recordWizardCard"></div>
+            <div class="actions form-actions wizard-actions">
+              <button class="ghost" id="recordWizardBack" type="button">Back</button>
+              <button class="primary" id="recordWizardNext" type="button">Next</button>
+              <button class="primary field-hidden" id="recordWizardSave" type="button">Complete & Save Record</button>
+              <button class="ghost" id="recordWizardReset" type="button" title="Clear this entry and start again. Saved records stay in place.">Reset Entry</button>
+            </div>
+            <div class="wizard-live-preview" id="wizardLivePreview"></div>
+            <div class="post-save-panel field-hidden" id="wizardPostSavePanel">
+              <strong>Saved.</strong>
+              <span id="wizardPostSaveText">Add another item for this business and tax year, or review the year.</span>
+              <div class="actions">
+                <button class="primary" type="button" data-post-add-type="cash_income">Add Income</button>
+                <button class="primary" type="button" data-post-add-type="cash_expense">Add Expense</button>
+                <button class="ghost" type="button" data-post-add-type="noncash_income">Add Product / Gift</button>
+                <button class="ghost" type="button" data-new-record-different-year>New Record / Different Year</button>
+                <button class="ghost" type="button" id="wizardCompleteYearReview">Review This Year</button>
+              </div>
+            </div>
+          </article>
+          <article class="panel span-12 simple-entry field-hidden" aria-hidden="true">
+            <div class="section-title">
+              <h3>Step 2: Add What Happened</h3>
+              <p class="muted">Save money made, money spent, or a product/gift/barter item. Tax Bestie asks a quick follow-up only when the record needs it.</p>
             </div>
             <form id="simpleEntryForm" class="simple-form">
               <div class="span-12 entry-choice" aria-label="Choose entry type">
                 <button class="entry-card income" type="button" data-simple-preset="cash_income">
                   <span>Money In</span>
-                  <strong>Money I received</strong>
+                  <strong>Money I made</strong>
                   <small>Cash, check, platform payout, brand deal, crypto, product/gift/barter</small>
                 </button>
                 <button class="entry-card expense active" type="button" data-simple-preset="cash_expense">
@@ -166,8 +204,8 @@
                   <small>Studio time, computer, mic, software, ads, contractor</small>
                 </button>
                 <button class="entry-card gift" type="button" data-simple-preset="noncash_income">
-                  <span>Non-Cash</span>
-                  <strong>Product / gift / barter</strong>
+                  <span>Product / Gift</span>
+                  <strong>Something I received</strong>
                   <small>Product, trip, service, or item received for content or work</small>
                 </button>
               </div>
@@ -179,7 +217,7 @@
                 </select>
               </label>
               <label class="span-6">Business / Activity
-                <input id="simpleBusinessSearch" list="businessSuggestions" placeholder="Start typing: content creator, ube, inst, tru, tax">
+                <input id="simpleBusinessSearch" list="businessSuggestions" placeholder="Type your business/activity or start with ube, inst, tru, tax">
                 <datalist id="businessSuggestions"></datalist>
                 <select id="simpleBusiness"></select>
                 <span class="helper" id="businessSuggestHint">Choose or create the activity this record belongs to.</span>
@@ -204,6 +242,7 @@
                 <select id="giftExchangeStatus" onchange="updateSimpleMappingPreview()"></select>
                 <span class="helper" id="giftReviewHint">The app will ask only when a gift, barter, product, giveaway, or promo item is relevant.</span>
               </label>
+              <div class="span-12 bestie-quick-check field-hidden" id="bestieQuickCheck"></div>
               <div class="span-12 fmv-help field-hidden" id="fmvHelp">
                 <strong>FMV evidence helper:</strong> For products, trips, barter, prizes, crypto, or brand items, save how you found the dollar value at the time received or paid. Useful proof can include a retail page screenshot, comparable sale, invoice, contract, exchange price, or qualified appraisal. IRS references: <a href="https://www.irs.gov/publications/p561" target="_blank" rel="noreferrer">Pub. 561 FMV principles</a> and <a href="https://www.irs.gov/publications/p525#en_US_2025_publink1000229556" target="_blank" rel="noreferrer">Pub. 525 barter income</a>. Educational only; confer with a qualified tax professional.
               </div>
@@ -211,20 +250,21 @@
               <label class="span-6" id="simpleProofField">Receipt / Screenshot / Proof<input id="simpleEvidenceFile" type="file" accept="image/*,.pdf" capture="environment"><span class="helper" id="simpleEvidenceHint">Optional proof.</span></label>
               <div class="span-12 actions form-actions">
                 <button class="primary" type="submit">Save Simple Entry</button>
-                <button type="button" class="ghost" id="clearSimpleForm">Clear Entry</button>
-                <button type="button" class="ghost" id="openAdvancedForm">Use Advanced Fields</button>
+                <button type="button" class="ghost" id="clearSimpleForm">Clear This Entry</button>
+                <button type="button" class="ghost" id="openAdvancedForm">Add Tax-Pro Details</button>
               </div>
             </form>
             <div class="post-save-panel field-hidden" id="postSavePanel">
               <strong>Saved.</strong>
-              <span id="postSaveText">Add another item for this business and tax year, or complete the tax-year review.</span>
+              <span id="postSaveText">Add another item for this business and tax year, or review progress.</span>
               <div class="actions">
                 <button class="primary" type="button" id="addMoreEntry">Add More</button>
-                <button class="ghost" type="button" id="completeYearReview">Complete Tax Year Review</button>
+                <button class="ghost" type="button" data-new-record-different-year>New Record / Different Year</button>
+                <button class="ghost" type="button" id="completeYearReview">Review Progress</button>
               </div>
             </div>
           </article>
-          <article class="panel span-12">
+          <article class="panel span-12 advanced-record-panel field-hidden" aria-hidden="true">
             <div class="section-title">
               <h3 id="formTitle">Advanced Record</h3>
               <p class="muted">Use this only when you need Schedule C, crypto, allocation, FMV, or detailed evidence fields.</p>
@@ -295,7 +335,7 @@
         <div class="grid">
           <article class="panel span-12">
             <div class="section-title">
-              <h3>Year Review</h3>
+              <h3>Progress</h3>
               <div class="record-toggles">
                 <span class="chip" id="recordsYearLabel">Showing selected year</span>
                 <label class="compact"><input type="checkbox" id="showAllYears"> Show all years</label>
@@ -317,20 +357,26 @@
       <section class="view" id="factors">
         <article class="panel">
           <div class="section-title">
-            <h3>Profit Alert <button class="info" data-tip="Section 183 limits deductions for activities not engaged in for profit. The IRS looks at all facts and circumstances; no single factor controls.">i</button></h3>
-            <button class="primary" id="saveFactors">Submit Review</button>
+              <h3>Business Check-In <button class="info" data-tip="One question at a time to organize records when losses or other facts need more support. Educational only.">i</button></h3>
+            <button class="primary" id="saveFactors">Save Check-In</button>
           </div>
           <div class="alert field-hidden" id="profitReviewIntro">
-            <strong>Bestie Alert:</strong> If this activity is only for personal enjoyment and you do not intend to make a profit, these profit motive questions may not apply. If you are treating this activity as a business, answer the questions below to help organize your records. When needed, confer with a qualified tax professional.
+            <strong>Bestie Alert:</strong> Your records may need stronger support. If this is just for personal enjoyment, these questions may not apply. If you are treating this as a business, answer the check-in questions to organize records for a qualified tax professional.
           </div>
           <div class="alert risk field-hidden" id="hobbyTreatmentIntro">
             <strong>Hobby treatment note:</strong> If you and your tax professional determine the activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.
           </div>
           <div id="factorSummary"></div>
+          <div class="checkin-progress field-hidden" id="checkinProgress">
+            <div class="progress-meta"><span id="checkinProgressText">Question 1 of 9</span><span id="checkinProgressPercent">11% complete</span></div>
+            <div class="progress-track"><div class="progress-fill" id="checkinProgressFill"></div></div>
+          </div>
           <div id="factorList"></div>
           <div class="actions form-actions factor-save-bottom">
-            <button class="primary" id="saveFactorsBottom">Submit Review</button>
-            <span class="muted">Creates an educational discussion summary to print or review with a qualified tax professional.</span>
+            <button class="ghost" id="factorBack" type="button">Back</button>
+            <button class="ghost" id="saveFactorsBottom" type="button">Save & Finish Later</button>
+            <button class="primary" id="factorNext" type="button">Next</button>
+            <span class="muted">Creates an educational discussion summary to review with a qualified tax professional.</span>
           </div>
         </article>
       </section>
@@ -353,8 +399,8 @@
             <p class="muted">For multiple businesses, include business_id or choose the business before manual entry. Use allocation_percent and shared_use_note for shared items.</p>
           </article>
           <article class="panel span-12">
-            <div class="section-title"><h3>Reset</h3><p class="muted">Use only when you want to clear this local walkthrough file.</p></div>
-            <button class="ghost danger" id="resetWalkthroughBtn" type="button">Reset / Clear Data</button>
+            <div class="section-title"><h3>Reset</h3><p class="muted">Use only when you want to clear all saved businesses, records, receipts, profit review answers, and history.</p></div>
+            <button class="ghost danger" id="resetWalkthroughBtn" type="button">Reset All Data</button>
           </article>
         </div>
       </section>
@@ -377,6 +423,6 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="/app.js?v=47"></script>
+  <script src="app.js?v=68"></script>
 </body>
 </html>

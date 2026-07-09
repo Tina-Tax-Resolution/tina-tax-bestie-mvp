@@ -2,15 +2,15 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const $ = (id) => document.getElementById(id);
 
 const factorText = [
-  ["Businesslike records", "Complete books, receipts, separate accounts, budgets, and changes meant to improve profit."],
-  ["Expertise", "Study, advisor input, training, or expert help used to run the activity as a business."],
-  ["Time and effort", "Substantial, continuous, and regular involvement, or qualified people hired to operate the activity."],
-  ["Asset appreciation", "Expectation that inventory, property, IP, crypto, or other assets may increase in value."],
-  ["Success in other activities", "Prior success turning similar or different ventures into profitable operations."],
-  ["Income and loss history", "Profit pattern or business explanations for losses, startup costs, or unusual setbacks."],
-  ["Occasional profits", "Substantial profits when profits occur, or a realistic chance of meaningful profit."],
-  ["Financial status", "Whether activity is operated for income rather than mainly sheltering other income."],
-  ["Personal pleasure", "Whether the activity is run primarily for economic profit rather than personal enjoyment."]
+  ["Do you keep records for this business?", "Examples: receipts, income reports, bank statements, invoices, mileage logs, calendars, screenshots, or notes saved when things happen."],
+  ["Do you save proof when money goes out?", "Receipts, screenshots, bank/card records, invoices, or notes can help explain what was paid and why."],
+  ["Do you track the money you make?", "Examples: platform payout reports, 1099s, cash logs, invoices, client payments, brand deal records, or bank deposits."],
+  ["Have you changed anything to make more money or lower costs?", "Examples: raised prices, changed content strategy, reduced subscriptions, switched vendors, added marketing, or stopped something that was losing money."],
+  ["Do you spend regular time working on this business?", "Examples: creating, editing, driving, selling, pitching, bookkeeping, planning, posting, or serving clients."],
+  ["Have you learned skills or asked experts for help?", "Examples: courses, coaching, advisor meetings, industry research, books, webinars, or paid consulting."],
+  ["Are any business assets expected to grow in value?", "Examples: brand name, website, inventory, equipment, domain, intellectual property, or other business assets."],
+  ["Have you made money in this or another business before?", "Examples: profitable years, profitable months, prior business success, major deals, or similar work that made money."],
+  ["Is this mainly being run like a business, not just for fun?", "Examples: planning, pricing, marketing, records, routines, client work, contracts, deadlines, and efforts to make a profit."]
 ];
 
 const scheduleCLines = [
@@ -130,14 +130,208 @@ let state = { settings: {}, businesses: [], entries: [], factors: [], audit: [] 
 let evidenceFilePayload = { name: "", type: "", data: "" };
 let profitReviewUnlocked = false;
 let profitReviewSubmitted = false;
+let currentFactorIndex = 0;
 let selectedTaxYearMemory = "";
 let selectedBusinessMemory = "";
+let recordWizard = {
+  step: 0,
+  businessName: "",
+  type: "",
+  payment: "",
+  date: "",
+  dateMonth: "",
+  dateDay: "",
+  amount: "",
+  what: "",
+  who: "",
+  giftStatus: "",
+  proofChoice: "",
+  proofName: "",
+  proofType: "",
+  proofData: ""
+};
 const hobbyTreatmentNote = "If this activity is not engaged in for profit, income may still need to be reported, but ordinary hobby expenses may be limited or unavailable as deductions under current federal rules. Inventory or cost-of-goods-sold questions should be reviewed separately with a qualified tax professional. Educational only.";
 const fmvEvidenceText = "FMV support: save retail listing, comparable sale, invoice, contract, exchange price, appraised value, or other contemporaneous proof. Educational only; confer with a qualified tax professional.";
 
 function lineLabel(line) {
   if (!line) return "Needs info - add description for Schedule C mapping";
+  if (line === "income_line_1") return "Schedule C Line 1 - Gross receipts or sales organizer";
+  if (line === "review_needed") return "Review needed - not counted in profit/loss";
   return (scheduleCLines.find(([value]) => value === line) || ["27b", "Line 27b - Other expenses"])[1];
+}
+
+function selectedBusiness() {
+  return state.businesses.find(business => Number(business.id) === selectedBusinessId());
+}
+
+function selectedBusinessTypeText() {
+  const business = selectedBusiness();
+  return `${business?.name || ""} ${business?.entity_type || ""} ${business?.description || ""}`.toLowerCase();
+}
+
+function isTransportationBusiness() {
+  return /truck|trucker|transportation|owner operator|freight|dot|over the road|otr/.test(selectedBusinessTypeText());
+}
+
+function businessIsSelectedOrTyped() {
+  return Boolean(selectedBusinessId() || String(recordWizard.businessName || "").trim());
+}
+
+function expenseWords() {
+  return `${$("simpleWhat")?.value || ""} ${$("simplePurpose")?.value || ""} ${$("simplePaymentType")?.value || ""}`.toLowerCase();
+}
+
+function expenseReviewSignals(words = expenseWords()) {
+  return {
+    meal: /meal|restaurant|coffee|lunch|dinner|food|per diem|truck stop/.test(words),
+    vehicle: /mileage|miles|gas|fuel|parking|toll|car|truck|vehicle|rideshare|delivery/.test(words),
+    homeOffice: /home office|office at home|business use of home|home workspace|utilities|electric|internet|wifi|rent|mortgage/.test(words),
+    travel: /hotel|flight|airfare|travel|lodging|conference|trip/.test(words),
+    asset: /computer|laptop|camera|microphone|mic|equipment|gear|phone|printer|tablet/.test(words),
+    studio: /studio|studio time|recording studio|workspace|coworking/.test(words),
+  };
+}
+
+function simpleAmountNumber() {
+  const value = normalizeMoneyValue($("simpleAmount")?.value || "");
+  return value ? Number(value) : 0;
+}
+
+const standardMileageRates = {
+  2021: [{ label: "2021", rate: 0.56 }],
+  2022: [{ label: "Jan 1-Jun 30", rate: 0.585 }, { label: "Jul 1-Dec 31", rate: 0.625 }],
+  2023: [{ label: "2023", rate: 0.655 }],
+  2024: [{ label: "2024", rate: 0.67 }],
+  2025: [{ label: "2025", rate: 0.70 }]
+};
+
+function mileageRateText(year = $("taxYear")?.value) {
+  const rates = standardMileageRates[Number(year)];
+  if (!rates) return `No hard-coded mileage rate is stored for TY ${year || "selected year"} yet; save mileage details and verify the IRS rate before filing.`;
+  return `TY ${year} standard mileage organizer rate: ${rates.map(item => `${item.label} ${Math.round(item.rate * 1000) / 10} cents/mile`).join("; ")}.`;
+}
+
+function expenseReviewNote(signals, amount = 0, words = "") {
+  const year = $("taxYear")?.value || "selected TY";
+  const notes = [];
+  if (signals.meal) {
+    notes.push(isTransportationBusiness()
+      ? `Meal review: transportation/DOT-style business selected, so Tax Bestie flags this for the 80% transportation meal review path for TY ${year}.`
+      : `Meal review: general business meal path, commonly organized for 50% review for TY ${year}.`);
+  }
+  if (signals.vehicle) {
+    notes.push(`Mileage/vehicle review: ${mileageRateText(year)} Do not include personal commuting miles.`);
+  }
+  if (signals.homeOffice) {
+    notes.push(`Home office review: organize square footage, regular/exclusive business use, and simplified vs actual-expense support for TY ${year}.`);
+  }
+  if (signals.asset || (amount >= 2000 && !signals.studio && !signals.meal && !signals.vehicle && !signals.homeOffice)) {
+    notes.push("Equipment/asset review: larger equipment may need depreciation or Section 179 review instead of a simple same-year expense.");
+  }
+  if (/truck|trucker|freight|owner operator/i.test(words) && !isTransportationBusiness()) {
+    notes.push("Business type check: this sounds transportation-related, but the selected business is not marked as trucker/transportation.");
+  }
+  return notes;
+}
+
+function resultLabel(net) {
+  if (net < 0) return `Net Loss ${money.format(net)}`;
+  if (net > 0) return `Net Profit ${money.format(net)}`;
+  return "Break even $0.00";
+}
+
+function wizardReset(type = "") {
+  const selectedName = $("businessFilter")?.value ? businessName($("businessFilter").value) : "";
+  recordWizard = {
+    step: 0,
+    businessName: selectedName,
+    type,
+    payment: "",
+    date: "",
+    dateMonth: "",
+    dateDay: "",
+    amount: "",
+    what: "",
+    who: "",
+    giftStatus: "",
+    proofChoice: "",
+    proofName: "",
+    proofType: "",
+    proofData: ""
+  };
+  renderRecordWizard();
+}
+
+function startWizardType(type, options = {}) {
+  const keepBusinessName = options.keepBusinessName ?? recordWizard.businessName;
+  wizardReset(type);
+  if (keepBusinessName) recordWizard.businessName = keepBusinessName;
+  recordWizard.step = type ? 1 : 0;
+  renderRecordWizard();
+}
+
+function showGuidedEntry(type = "") {
+  goToView("capture", "Add Record", "Answer one question at a time to save income, expenses, products, gifts, or barter.");
+  document.querySelector(".record-wizard-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (type) startWizardType(type);
+  else renderRecordWizard();
+}
+
+function parseWizardDate(value) {
+  const raw = String(value || "").trim();
+  const selectedYear = $("taxYear")?.value || "";
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
+  if (!match) return "";
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  let year = match[3] ? Number(match[3]) : Number(selectedYear);
+  if (year < 100) year += 2000;
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return "";
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function displayWizardDate(value) {
+  const parsed = parseWizardDate(value);
+  if (!parsed) return value || "";
+  const [year, month, day] = parsed.split("-");
+  return `${month}/${day}/${year}`;
+}
+
+function wizardDateParts() {
+  const parsed = parseWizardDate(recordWizard.date);
+  if (parsed) {
+    const [, month, day] = parsed.split("-");
+    return { month, day };
+  }
+  return {
+    month: recordWizard.dateMonth || "",
+    day: recordWizard.dateDay || ""
+  };
+}
+
+function syncWizardDateParts() {
+  const year = $("taxYear")?.value || "";
+  const month = String(recordWizard.dateMonth || "").trim();
+  const day = String(recordWizard.dateDay || "").trim();
+  if (!/^\d{4}$/.test(year) || !month || !day) {
+    recordWizard.date = "";
+    return "";
+  }
+  const parsed = parseWizardDate(`${month}/${day}/${year}`);
+  recordWizard.date = parsed;
+  return parsed;
+}
+
+function quarterFromDate(dateValue) {
+  const parsed = String(dateValue || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(parsed)) return "";
+  const month = Number(parsed.slice(5, 7));
+  if (!month) return "";
+  return `Q${Math.ceil(month / 3)}`;
 }
 
 function inferLine() {
@@ -164,8 +358,8 @@ function updateLineSuggestion(force = false) {
   if (!$("recordType").value.includes("income") && inferred === "24b") {
     const transportationMeal = /truck|trucker|transportation|dot|driver|over the road|otr|hours of service/.test(text);
     $("scheduleHint").textContent = transportationMeal
-      ? "Suggested: Line 24b - Deductible meals. Transportation worker/DOT meals may have an 80% limit instead of the usual 50%; save trip details and confirm the tax-year rule with a qualified tax professional."
-      : "Suggested: Line 24b - Deductible meals. The app should store the full receipt amount and estimate the deductible portion separately, often 50%. Confirm exceptions with a qualified tax professional.";
+      ? "Suggested: Line 24b - Meals review. Transportation worker meals may follow a different review path than ordinary business meals; save trip details and confirm the tax-year rule with a qualified tax professional."
+      : "Suggested: Line 24b - Meals review. The app stores the full receipt amount and flags the general meal review path. Confirm treatment with a qualified tax professional.";
     return;
   }
   if (!$("recordType").value.includes("income") && inferred === "9") {
@@ -218,6 +412,7 @@ function updateSimpleMappingPreview() {
   updateGiftReviewHint(giftContext);
   updatePaymentContext();
   updateFmvHelp(type, giftContext, giftStatus);
+  renderBestieQuickCheck(type, words, giftContext, giftStatus);
   const preview = $("simpleSchedulePreview");
   if (!preview) return;
   preview.classList.toggle("empty", !what && !purpose);
@@ -261,6 +456,588 @@ function updateSimpleMappingPreview() {
   preview.textContent = `Suggested Schedule C line: ${lineLabel(line || "needs_info")}. ${reason}${giftGivenNote ? ` ${giftGivenNote}` : ""}`;
 }
 
+function renderBestieQuickCheck(type = $("simpleType")?.value, words = expenseWords(), giftContext = { visible: false, direction: "" }, giftStatus = $("giftExchangeStatus")?.value || "") {
+  const box = $("bestieQuickCheck");
+  if (!box) return;
+  const amount = simpleAmountNumber();
+  const signals = expenseReviewSignals(words);
+  const isExpense = type === "cash_expense" || type === "crypto_expense";
+  const checks = [];
+
+  if (isExpense && signals.meal) {
+    if (isTransportationBusiness()) {
+      checks.push({
+        tone: "warn",
+        title: "Transportation meal quick check",
+        text: "This looks like a meal for a trucker/transportation business. Tax Bestie will organize it under the transportation meal review path only if the facts support it.",
+        buttons: ["Business travel meal", "Not sure", "No"]
+      });
+    } else {
+      checks.push({
+        tone: "",
+        title: "Meal quick check",
+        text: "This looks like a meal. Tax Bestie will keep the full receipt amount and organize it for general meal review.",
+        buttons: ["Business meal", "Not sure", "No"]
+      });
+    }
+  }
+  if (isExpense && signals.vehicle) {
+    checks.push({
+      tone: "",
+      title: "Mileage / vehicle quick check",
+      text: "This looks like mileage, gas, tolls, parking, or vehicle use. Save the receipt or mileage log if you have it.",
+      buttons: ["Have proof", "Add later", "Not sure"]
+    });
+  }
+  if (isExpense && signals.homeOffice) {
+    checks.push({
+      tone: "warn",
+      title: "Home office quick check",
+      text: "This may involve home office or mixed-use costs. Tax Bestie will mark it for review so square footage, business use, and proof can be checked later.",
+      buttons: ["Mark for review", "Not now", "Not sure"]
+    });
+  }
+  if (isExpense && (signals.asset || amount >= 2000)) {
+    checks.push({
+      tone: "warn",
+      title: "Equipment / asset quick check",
+      text: "This looks like a larger item or equipment. It may need asset review instead of being treated like a simple dollar-for-dollar expense.",
+      buttons: ["Mark for review", "Add receipt", "Not sure"]
+    });
+  }
+  if ((type === "noncash_income" || giftContext.direction === "received") && (giftStatus === "yes" || giftStatus === "unsure" || signals.asset || words)) {
+    checks.push({
+      tone: giftStatus === "unsure" ? "warn" : "",
+      title: "Product / gift quick check",
+      text: "Save the dollar value and proof for products, trips, services, or gifts received for content, reviews, promotion, or business activity.",
+      buttons: ["Received for work", "Not sure", "No"]
+    });
+  }
+
+  if (!checks.length) {
+    box.classList.add("field-hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  box.classList.remove("field-hidden");
+  box.innerHTML = `<div class="bestie-quick-grid">${checks.slice(0, 2).map(check => `
+    <div class="bestie-quick-card ${check.tone}">
+      <strong>Bestie Quick Check: ${escapeHtml(check.title)}</strong>
+      <p>${escapeHtml(check.text)}</p>
+      <div class="pill-row">${check.buttons.map(button => `<span class="pill">${escapeHtml(button)}</span>`).join("")}</div>
+    </div>
+  `).join("")}</div>`;
+}
+
+function wizardTypeChoices() {
+  return [
+    ["cash_income", "Add business income", "Money made from business activities: payments, payouts, cash, checks, platform income, and brand deals"],
+    ["cash_expense", "Add business expense", "Money spent to run or operate the business or provide products/services"],
+    ["noncash_income", "Add product, gift, or barter", "Non-cash items received for a service, review, promotion, post, or brand deal"]
+  ];
+}
+
+function wizardSteps() {
+  if (!recordWizard.type) return [{ key: "business" }, { key: "type" }];
+  if (recordWizard.type === "cash_income") return [
+    { key: "business" },
+    { key: "type" },
+    { key: "payment" },
+    { key: "date" },
+    { key: "amount" },
+    { key: "who" },
+    { key: "proofChoice" },
+    ...(recordWizard.proofChoice === "yes" ? [{ key: "proof" }] : []),
+    { key: "review" }
+  ];
+  if (recordWizard.type === "cash_expense") return [
+    { key: "business" },
+    { key: "type" },
+    { key: "what" },
+    { key: "date" },
+    { key: "amount" },
+    { key: "who" },
+    { key: "proofChoice" },
+    ...(recordWizard.proofChoice === "yes" ? [{ key: "proof" }] : []),
+    { key: "review" }
+  ];
+  const steps = [
+    { key: "business" },
+    { key: "type" },
+    { key: "giftStatus" },
+    { key: "what" }
+  ];
+  if (recordWizard.giftStatus === "yes") steps.push({ key: "date" }, { key: "amount" });
+  steps.push({ key: "who" }, { key: "proofChoice" });
+  if (recordWizard.proofChoice === "yes") steps.push({ key: "proof" });
+  steps.push({ key: "review" });
+  return steps;
+}
+
+function currentWizardStep() {
+  const steps = wizardSteps();
+  recordWizard.step = Math.max(0, Math.min(recordWizard.step, steps.length - 1));
+  return steps[recordWizard.step]?.key || "type";
+}
+
+function wizardStepLabel(key) {
+  return {
+    business: "Business",
+    type: "Record type",
+    payment: "Payment",
+    giftStatus: "Gift check",
+    what: "Details",
+    date: "Date",
+    amount: "Amount",
+    who: "Payer/Payee",
+    proofChoice: "Proof",
+    proof: "Upload",
+    review: "Review"
+  }[key] || "Step";
+}
+
+function renderWizardProgressSteps(steps) {
+  const el = $("recordWizardProgressSteps");
+  if (!el) return;
+  el.innerHTML = steps.map((item, index) => {
+    const className = index < recordWizard.step ? "done" : index === recordWizard.step ? "active" : "";
+    return `<span class="${className}"><b>${index + 1}</b>${escapeHtml(wizardStepLabel(item.key))}</span>`;
+  }).join("");
+}
+
+function wizardChoiceButtons(choices, field) {
+  return `<div class="wizard-choices">${choices.map(([value, title, helper]) => `
+    <button type="button" class="wizard-choice ${recordWizard[field] === value ? "selected" : ""}" data-wizard-choice="${escapeHtml(field)}" data-value="${escapeHtml(value)}">
+      <strong>${escapeHtml(title)}</strong>
+      <small>${escapeHtml(helper || "")}</small>
+    </button>
+  `).join("")}</div>`;
+}
+
+function wizardTextInput(field, label, placeholder, helper = "", inputmode = "text") {
+  return `<label class="wizard-input">${escapeHtml(label)}
+    <input id="wizardInput" data-wizard-input="${escapeHtml(field)}" inputmode="${escapeHtml(inputmode)}" value="${escapeHtml(field === "date" ? displayWizardDate(recordWizard[field]) : recordWizard[field] || "")}" placeholder="${escapeHtml(placeholder)}">
+    ${helper ? `<span class="helper">${escapeHtml(helper)}</span>` : ""}
+  </label>`;
+}
+
+function wizardImpactAmount() {
+  const amount = Number(normalizeMoneyValue(recordWizard.amount || "0") || 0);
+  if (!amount || amount <= 0) return { income: 0, expenses: 0, counts: false, amount: 0 };
+  if (recordWizard.type === "cash_income") return { income: amount, expenses: 0, counts: true, amount };
+  if (recordWizard.type === "cash_expense") return { income: 0, expenses: amount, counts: true, amount };
+  if (recordWizard.type === "noncash_income" && recordWizard.giftStatus === "yes") {
+    return { income: amount, expenses: 0, counts: true, amount };
+  }
+  return { income: 0, expenses: 0, counts: false, amount };
+}
+
+function currentRecordFileReady() {
+  return Boolean($("taxYear")?.value && businessIsSelectedOrTyped());
+}
+
+function wizardBusinessIdForTotals() {
+  const selected = selectedBusinessId();
+  if (selected) return selected;
+  const typed = String(recordWizard.businessName || "").trim().toLowerCase();
+  if (!typed) return 0;
+  return Number(state.businesses.find(business => business.name.toLowerCase() === typed)?.id || 0);
+}
+
+function selectedYearTotalsStrip(businessId = wizardBusinessIdForTotals()) {
+  const year = $("taxYear")?.value || "";
+  if (!year || !businessId) return "";
+  const t = totals(year, businessId);
+  const path = profitPath(recentFiveYearWindow(businessId));
+  const highFlags = readinessFlags(t);
+  const lossText = path.lossRows.length
+    ? `${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"} in the five-year lookback`
+    : "No completed loss years in this five-year lookback yet";
+  const alertText = path.threeLossTrigger
+    ? `<div class="alert risk compact-alert"><strong>Bestie Alert:</strong> Losses appear in 3 of the last 5 completed tax years. The Business Check-In should be completed for educational record organization and discussion with a qualified tax professional.</div>`
+    : highFlags.hasFlags && t.net < 0
+      ? readinessAlertHtml(t)
+      : "";
+  return `<div class="year-total-strip">
+    <div><span>Selected file</span><strong>TY ${escapeHtml(year)}</strong></div>
+    <div><span>Saved income</span><strong>${money.format(t.income)}</strong></div>
+    <div><span>Saved expenses</span><strong>${money.format(t.expenses)}</strong></div>
+    <div><span>Current result</span><strong class="${t.net < 0 ? "loss-text" : t.net > 0 ? "profit-text" : ""}">${resultLabel(t.net)}</strong></div>
+    <div><span>5-year watch</span><strong>${escapeHtml(lossText)}</strong></div>
+  </div>${alertText}`;
+}
+
+function wizardLivePreviewHtml() {
+  if (!businessIsSelectedOrTyped()) {
+    return `<div class="alert"><strong>Choose business/activity:</strong> Add or select the business first. Tax Bestie needs the business type before it can organize meals, mileage, home office, trucker/transportation items, and profit/loss by tax year.</div>`;
+  }
+  if (!$("taxYear")?.value) {
+    return `<div class="alert"><strong>Choose a tax year:</strong> Select the tax year at the top so Tax Bestie can show live profit or loss for the right record file.</div>`;
+  }
+  const t = totals($("taxYear").value, wizardBusinessIdForTotals());
+  const impact = wizardImpactAmount();
+  const afterIncome = t.income + impact.income;
+  const afterExpenses = t.expenses + impact.expenses;
+  const afterNet = afterIncome - afterExpenses;
+  const parsedDate = parseWizardDate(recordWizard.date);
+  const quarter = quarterFromDate(parsedDate);
+  const quarterRows = parsedDate ? entriesForYear($("taxYear").value, wizardBusinessIdForTotals()).filter(entry => quarterFromDate(entry.event_date) === quarter) : [];
+  const savedQuarter = quarterRows.reduce((sum, entry) => {
+    if (isIncome(entry)) sum.income += Number(entry.amount_usd || 0);
+    else sum.expenses += Number(entry.amount_usd || 0);
+    return sum;
+  }, { income: 0, expenses: 0 });
+  const afterQuarterIncome = savedQuarter.income + impact.income;
+  const afterQuarterExpenses = savedQuarter.expenses + impact.expenses;
+  const typeText = recordWizard.type === "cash_income"
+    ? "business income"
+    : recordWizard.type === "cash_expense"
+      ? "business expense"
+      : recordWizard.giftStatus === "yes"
+        ? "product/gift FMV income organizer"
+        : recordWizard.giftStatus === "unsure"
+          ? "review-only product/gift note"
+          : recordWizard.giftStatus === "no"
+            ? "personal gift note"
+            : "record";
+  const countText = impact.counts
+    ? `If completed now, this ${typeText} changes the selected year to ${money.format(afterNet)}.`
+    : recordWizard.type === "noncash_income" && recordWizard.giftStatus
+      ? `This ${typeText} is not counted in profit/loss yet. It stays in the file for review.`
+      : "Enter the amount or FMV to see the live profit/loss impact before saving.";
+  const highQuarter = quarter && afterQuarterExpenses > 0 && (afterQuarterIncome === 0 || afterQuarterExpenses >= afterQuarterIncome * 1.5);
+  const highYear = afterNet < 0 && afterExpenses >= Math.max(afterIncome * 1.5, 1);
+  const alert = highQuarter || highYear
+    ? `<div class="alert warn"><strong>Bestie Alert:</strong> ${highQuarter ? `For ${escapeHtml(quarter)} in TY ${escapeHtml($("taxYear").value)}, money spent is heavily outpacing money made.` : `Based on this entry, TY ${escapeHtml($("taxYear").value)} money spent is heavily outpacing money made.`} Business investments can be normal, but these records may need stronger support. Attach receipts, contracts, pitches, platform reports, or notes so a qualified tax professional can review the file.</div>`
+    : "";
+  const expenseNote = recordWizard.type === "cash_expense"
+    ? expenseReviewNote(expenseReviewSignals(recordWizard.what.toLowerCase()), impact.amount, recordWizard.what).map(note => `<li>${escapeHtml(note)}</li>`).join("")
+    : "";
+  return `${selectedYearTotalsStrip(wizardBusinessIdForTotals())}<div class="live-preview-grid">
+    <div><span>Already saved for TY ${escapeHtml($("taxYear").value)}</span><strong>${money.format(t.net)}</strong><small>Income ${money.format(t.income)} | Expenses ${money.format(t.expenses)}</small></div>
+    <div><span>This entry</span><strong>${impact.counts ? money.format(impact.amount) : "Review only"}</strong><small>${escapeHtml(typeText)}</small></div>
+    <div><span>Projected TY ${escapeHtml($("taxYear").value)} result</span><strong class="${afterNet < 0 ? "loss-text" : afterNet > 0 ? "profit-text" : ""}">${resultLabel(afterNet)}</strong><small>Income ${money.format(afterIncome)} | Expenses ${money.format(afterExpenses)}</small></div>
+  </div>
+  <div class="calculator-callout ${afterNet < 0 ? "loss" : afterNet > 0 ? "profit" : ""}">
+    <strong>Tax Bestie calculator:</strong> TY ${escapeHtml($("taxYear").value)} would show ${escapeHtml(resultLabel(afterNet))} after this record.
+  </div>
+  <p class="muted">${escapeHtml(countText)}</p>
+  ${expenseNote ? `<div class="wizard-hint"><strong>Expense review:</strong><ul>${expenseNote}</ul></div>` : ""}
+  ${alert}`;
+}
+
+function renderWizardLivePreview() {
+  const box = $("wizardLivePreview");
+  if (!box) return;
+  box.innerHTML = wizardLivePreviewHtml();
+}
+
+function wizardQuestionHtml(step) {
+  const year = $("taxYear")?.value || "the selected tax year";
+  if (step === "business") {
+    return `<div class="wizard-question">
+      <h4>What business or activity is this for?</h4>
+      <p class="muted">Type the business/activity once. Tax Bestie will keep using the selected tax year until you change it at the top.</p>
+      ${wizardTextInput("businessName", "Business / activity", "Type your business or activity", "Example: rideshare driver, delivery shopper, content creator, tax service")}
+    </div>`;
+  }
+  if (step === "type") {
+    return `<div class="wizard-question">
+      <h4>What are you adding for ${escapeHtml(year)}?</h4>
+      <p class="muted">Choose the kind of record. If this belongs to a different tax year, change the tax year at the top before saving.</p>
+      ${wizardChoiceButtons(wizardTypeChoices(), "type")}
+    </div>`;
+  }
+  if (step === "payment") {
+    return `<div class="wizard-question">
+      <h4>How were you paid?</h4>
+      <p class="muted">This helps organize the income record. It still maps to Schedule C income organizer review.</p>
+      ${wizardChoiceButtons([
+        ["cash", "Cash", "Cash received for business activity"],
+        ["check", "Check", "Check payment received"],
+        ["platform", "Platform payout", "YouTube, TikTok, affiliate, marketplace, Stripe"],
+        ["client", "Client payment", "Invoice or direct client payment"],
+        ["brand_deal", "Brand deal", "Sponsorship, paid post, promotion"],
+        ["crypto_business", "Crypto business payment", "USD value at time received; business payments only"]
+      ], "payment")}
+    </div>`;
+  }
+  if (step === "giftStatus") {
+    return `<div class="wizard-question">
+      <h4>Was this received for a post, review, service, promotion, brand deal, or barter?</h4>
+      <p class="muted">Answer this before entering value. If yes, Tax Bestie asks for the date and fair market value so it can be organized for income review.</p>
+      <div class="wizard-hint">Bestie note: brand promotions and non-cash deals can still be part of business records. Save the details and review tax treatment with a qualified tax professional.</div>
+      ${wizardChoiceButtons([
+        ["yes", "Yes, it was connected to business activity", "Post, review, service, promotion, brand deal, or barter"],
+        ["no", "No, personal gift", "Tax Bestie will not count it in business income"],
+        ["unsure", "Not sure", "Saved as review needed and not counted in profit/loss yet"]
+      ], "giftStatus")}
+    </div>`;
+  }
+  if (step === "what") {
+    const isExpense = recordWizard.type === "cash_expense";
+    const isGift = recordWizard.type === "noncash_income";
+    const line = isExpense && recordWizard.what ? inferLineFrom("cash_expense", recordWizard.what, "") : "";
+    return `<div class="wizard-question">
+      <h4>${isExpense ? "What did you spend money on for your business activity?" : isGift ? "What did you receive?" : "What was it?"}</h4>
+      <p class="muted">${isExpense ? "Type the business expense. Tax Bestie will suggest a Schedule C organizer line in the background." : "Keep this short and practical."}</p>
+      ${wizardTextInput("what", isExpense ? "Business expense" : "Item received", isExpense ? "Studio time, mic, software, meals, mileage" : "Shoes, camera, hotel stay, product, service")}
+      ${isExpense ? `<div class="wizard-hint" id="wizardMappingHint">${recordWizard.what ? `<strong>Suggested Schedule C organizer line:</strong> ${escapeHtml(lineLabel(line))}. ${/studio/i.test(recordWizard.what) ? "Studio time looks like rented business space." : "Review with a qualified tax professional before filing."}` : "Type the expense to see the Schedule C organizer mapping."}</div>` : ""}
+    </div>`;
+  }
+  if (step === "date") {
+    const { month, day } = wizardDateParts();
+    const parsed = syncWizardDateParts() || parseWizardDate(recordWizard.date);
+    const yearText = /^\d{4}$/.test(String(year)) ? String(year) : "Select TY";
+    return `<div class="wizard-question">
+      <h4>What date did this happen?</h4>
+      <p class="muted">${/^\d{4}$/.test(String(year)) ? `For TY ${escapeHtml(year)}, enter only the month and day. The year is locked from the tax year selected at the top.` : "Choose the tax year at the top first. Then Tax Bestie will lock the year here."}</p>
+      <div class="wizard-date-grid">
+        <label>Month
+          <input data-wizard-date-part="month" inputmode="numeric" maxlength="2" value="${escapeHtml(month)}" placeholder="MM">
+        </label>
+        <label>Day
+          <input data-wizard-date-part="day" inputmode="numeric" maxlength="2" value="${escapeHtml(day)}" placeholder="DD">
+        </label>
+        <label>Tax year
+          <input value="${escapeHtml(yearText)}" readonly aria-readonly="true">
+        </label>
+      </div>
+      <div class="wizard-hint"><strong>Selected tax year:</strong> ${escapeHtml(yearText)}. If this record belongs to another year, change the tax year at the top before saving.</div>
+      ${parsed ? `<div class="wizard-hint"><strong>Will save as:</strong> ${escapeHtml(displayWizardDate(parsed))}</div>` : ""}
+    </div>`;
+  }
+  if (step === "amount") {
+    const isGift = recordWizard.type === "noncash_income";
+    return `<div class="wizard-question">
+      <h4>${isGift ? "What was the fair market value?" : recordWizard.type === "cash_income" ? "How much did you receive?" : "How much did you pay?"}</h4>
+      <p class="muted">${isGift ? "Use the dollar value at the time received. Save proof such as a retail page, invoice, contract, or screenshot if you can." : "Enter dollars and cents if needed."}</p>
+      ${wizardTextInput("amount", isGift ? "Fair market value" : "Amount", "0.00", isGift ? "Proof can be a retail page, invoice, contract, screenshot, or comparable value." : "", "decimal")}
+    </div>`;
+  }
+  if (step === "who") {
+    const label = recordWizard.type === "cash_expense" ? "Who did you pay?" : recordWizard.type === "noncash_income" ? "Who gave it to you?" : "Who paid you?";
+    return `<div class="wizard-question">
+      <h4>${escapeHtml(label)}</h4>
+      <p class="muted">Optional, but helpful for your record file.</p>
+      ${wizardTextInput("who", label, recordWizard.type === "cash_expense" ? "Studio, Amazon, software company" : "Brand, platform, sponsor, client")}
+    </div>`;
+  }
+  if (step === "proof") {
+    return `<div class="wizard-question">
+      <h4>Add proof now</h4>
+      <p class="muted">Upload a receipt, screenshot, contract, payout report, or FMV proof if you have it now.</p>
+      <label class="wizard-input">Receipt / screenshot / proof
+        <input id="recordWizardProofInput" type="file" accept="image/*,.pdf" capture="environment">
+        <span class="helper">${escapeHtml(recordWizard.proofName || "You can skip this and add proof later.")}</span>
+      </label>
+    </div>`;
+  }
+  if (step === "proofChoice") {
+    return `<div class="wizard-question">
+      <h4>Do you have proof to add now?</h4>
+      <p class="muted">Proof is optional for this step. You can save the record now and add support later if needed.</p>
+      ${wizardChoiceButtons([
+        ["yes", "Yes, add proof now", "Receipt, screenshot, contract, payout report, or FMV support"],
+        ["no", "No, skip for now", "Save the record without a file attached"]
+      ], "proofChoice")}
+    </div>`;
+  }
+  return wizardReviewHtml();
+}
+
+function wizardReviewHtml() {
+  const typeLabel = wizardTypeChoices().find(([value]) => value === recordWizard.type)?.[1] || "Record";
+  const parsedDate = parseWizardDate(recordWizard.date);
+  const schedule = recordWizard.type === "cash_expense" ? lineLabel(inferLineFrom("cash_expense", recordWizard.what, "")) : "Schedule C Line 1 - Gross receipts or sales organizer";
+  const giftNote = recordWizard.type === "noncash_income" && recordWizard.giftStatus !== "yes"
+    ? `<p><strong>Counting:</strong> Not counted in income or profit/loss yet. ${recordWizard.giftStatus === "no" ? "You marked it personal." : "You marked it not sure, so it is saved as review needed."}</p>`
+    : "";
+  return `<div class="wizard-question">
+    <h4>Review before saving</h4>
+    <div class="wizard-review">
+      <p><strong>Type:</strong> ${escapeHtml(typeLabel)}</p>
+      ${recordWizard.payment ? `<p><strong>Payment type:</strong> ${escapeHtml(paymentTypeLabel("cash_income", recordWizard.payment) || recordWizard.payment)}</p>` : ""}
+      ${recordWizard.giftStatus ? `<p><strong>Business connection:</strong> ${escapeHtml(recordWizard.giftStatus === "yes" ? "Yes, received for business activity" : recordWizard.giftStatus === "no" ? "No, personal gift" : "Not sure - review needed")}</p>` : ""}
+      ${recordWizard.what ? `<p><strong>What:</strong> ${escapeHtml(recordWizard.what)}</p>` : ""}
+      ${parsedDate ? `<p><strong>Date:</strong> ${escapeHtml(displayWizardDate(parsedDate))}</p>` : ""}
+      ${recordWizard.amount ? `<p><strong>Amount / FMV:</strong> ${money.format(Number(normalizeMoneyValue(recordWizard.amount) || 0))}</p>` : ""}
+      ${recordWizard.who ? `<p><strong>Provider / payer / payee:</strong> ${escapeHtml(recordWizard.who)}</p>` : ""}
+      <p><strong>Organizer mapping:</strong> ${escapeHtml(schedule)}</p>
+      ${giftNote}
+      <p class="muted">Tax Bestie organizes records only. It does not decide deductibility, taxability, business status, or Circular 230 written tax advice. Review with a qualified tax professional.</p>
+    </div>
+  </div>`;
+}
+
+function renderRecordWizard() {
+  const card = $("recordWizardCard");
+  if (!card) return;
+  const steps = wizardSteps();
+  const step = currentWizardStep();
+  const percent = Math.round((recordWizard.step / Math.max(steps.length - 1, 1)) * 100);
+  if ($("recordWizardStep")) $("recordWizardStep").textContent = `Step ${recordWizard.step + 1} of ${steps.length}`;
+  if ($("recordWizardPercent")) $("recordWizardPercent").textContent = `${percent}% complete`;
+  if ($("recordWizardFill")) $("recordWizardFill").style.width = `${percent}%`;
+  renderWizardProgressSteps(steps);
+  document.querySelectorAll("[data-wizard-start-type]").forEach(button => {
+    button.classList.toggle("active", button.dataset.wizardStartType === recordWizard.type);
+  });
+  card.innerHTML = wizardQuestionHtml(step);
+  $("recordWizardBack")?.classList.toggle("field-hidden", recordWizard.step === 0);
+  $("recordWizardNext")?.classList.toggle("field-hidden", step === "review");
+  $("recordWizardSave")?.classList.toggle("field-hidden", step !== "review");
+  renderWizardLivePreview();
+}
+
+function validateWizardStep() {
+  const step = currentWizardStep();
+  const year = $("taxYear")?.value;
+  if (step === "business" && !recordWizard.businessName.trim()) return "Type the business or activity before continuing.";
+  if (step === "type" && !recordWizard.type) return "Choose what you are adding.";
+  if (step === "payment" && !recordWizard.payment) return "Choose how you were paid.";
+  if (step === "giftStatus" && !recordWizard.giftStatus) return "Choose whether this was received because of your business activity.";
+  if (step === "what" && !recordWizard.what.trim()) return recordWizard.type === "cash_expense" ? "Type what you spent money on." : "Type what you received.";
+  if (step === "date") {
+    if (!year) return "Choose the tax year first.";
+    const parsed = parseWizardDate(recordWizard.date);
+    if (!parsed) return "Enter a valid date.";
+    const check = dateMatchesTaxYear(parsed, year);
+    if (!check.ok) return check.message;
+  }
+  if (step === "amount" && !validMoneyValue(recordWizard.amount)) return "Enter a valid dollar amount.";
+  if (step === "proofChoice" && !recordWizard.proofChoice) return "Choose whether you want to add proof now.";
+  return "";
+}
+
+async function readWizardProof() {
+  const field = $("recordWizardProofInput");
+  if (!field?.files?.length) return;
+  const file = await readFileInput("recordWizardProofInput");
+  recordWizard.proofName = file.name;
+  recordWizard.proofType = file.type;
+  recordWizard.proofData = file.data;
+}
+
+function syncWizardInput() {
+  document.querySelectorAll("[data-wizard-date-part]").forEach(input => {
+    const cleaned = input.value.replace(/\D/g, "").slice(0, 2);
+    recordWizard[input.dataset.wizardDatePart === "month" ? "dateMonth" : "dateDay"] = cleaned;
+  });
+  syncWizardDateParts();
+  const input = $("wizardInput");
+  if (input?.dataset?.wizardInput) {
+    recordWizard[input.dataset.wizardInput] = input.value.trim();
+  }
+}
+
+function updateWizardMappingHint() {
+  const hint = $("wizardMappingHint");
+  if (!hint) return;
+  const words = recordWizard.what || "";
+  if (!words.trim()) {
+    hint.textContent = "Type the expense to see the Schedule C organizer mapping.";
+    return;
+  }
+  const line = inferLineFrom("cash_expense", words, "");
+  hint.innerHTML = `<strong>Suggested Schedule C organizer line:</strong> ${escapeHtml(lineLabel(line))}. ${/studio/i.test(words) ? "Studio time looks like rented business space." : "Review with a qualified tax professional before filing."}`;
+}
+
+async function saveWizardRecord() {
+  syncWizardInput();
+  if (recordWizard.businessName.trim()) {
+    $("simpleBusinessSearch").value = recordWizard.businessName.trim();
+    applyBusinessSuggestionToInput("simpleBusinessSearch");
+  }
+  const businessId = await ensureSimpleBusiness();
+  const taxYear = $("taxYear").value;
+  if (!taxYear) {
+    toast("Choose the tax year before saving.");
+    return;
+  }
+  const parsedDate = parseWizardDate(recordWizard.date);
+  const dateCheck = recordWizard.type === "noncash_income" && recordWizard.giftStatus !== "yes"
+    ? { ok: true }
+    : dateMatchesTaxYear(parsedDate, taxYear);
+  if (!dateCheck.ok) {
+    toast(dateCheck.message);
+    return;
+  }
+
+  const isGiftReviewOnly = recordWizard.type === "noncash_income" && recordWizard.giftStatus !== "yes";
+  const amount = isGiftReviewOnly ? "0.00" : Number(normalizeMoneyValue(recordWizard.amount || "0")).toFixed(2);
+  if (!isGiftReviewOnly && (!amount || Number(amount) <= 0)) {
+    toast("Enter a valid dollar amount before saving.");
+    return;
+  }
+
+  const paymentText = recordWizard.payment ? (paymentTypeLabel("cash_income", recordWizard.payment) || recordWizard.payment) : "";
+  const scheduleLine = recordWizard.type === "cash_expense"
+    ? inferLineFrom("cash_expense", recordWizard.what, "")
+    : recordWizard.type === "cash_income" || (recordWizard.type === "noncash_income" && recordWizard.giftStatus === "yes")
+      ? "income_line_1"
+      : "review_needed";
+  const recordType = isGiftReviewOnly ? "review_note" : recordWizard.type === "noncash_income" ? "noncash_income" : recordWizard.type;
+  const giftText = recordWizard.type === "noncash_income"
+    ? recordWizard.giftStatus === "yes"
+      ? "Gift/product question: Yes, received for business activity such as a post, review, service, promotion, brand deal, or barter."
+      : recordWizard.giftStatus === "no"
+        ? "Gift/product question: No, marked as personal and not counted in business income by Tax Bestie."
+        : "Gift/product question: Not sure; saved as review needed and not counted in income or profit/loss yet."
+    : "";
+  const simpleSignals = expenseReviewSignals(recordWizard.what.toLowerCase());
+  const reviewNotes = recordWizard.type === "cash_expense" ? expenseReviewNote(simpleSignals, Number(amount), recordWizard.what) : [];
+  const quickNotes = [];
+  if (recordWizard.type === "cash_expense") {
+    quickNotes.push(...reviewNotes.map(note => `Bestie Quick Check: ${note}`));
+  }
+
+  const payload = {
+    business_id: businessId,
+    record_type: recordType,
+    tax_year: taxYear,
+    event_date: parsedDate || `${taxYear}-01-01`,
+    amount_usd: amount,
+    allocation_percent: 100,
+    asset_review: isGiftReviewOnly || (simpleSignals.asset && Number(amount) >= 2000) || simpleSignals.homeOffice || simpleSignals.meal || simpleSignals.vehicle || recordWizard.giftStatus === "unsure" ? "review_needed" : "not_needed",
+    shared_use_note: "",
+    category: recordWizard.what || (recordWizard.type === "cash_income" ? paymentText || "Business income" : "Review needed"),
+    description: recordWizard.type === "cash_income" ? paymentText : "",
+    schedule_line: scheduleLine,
+    counterparty: recordWizard.who || "",
+    fmv_method: recordWizard.type === "noncash_income" ? `${fmvEvidenceText} ${giftText}`.trim() : "",
+    crypto_asset: "",
+    crypto_amount: "",
+    crypto_wallet: "",
+    transaction_hash: "",
+    evidence_note: [paymentText ? `Payment/remittance type: ${paymentText}.` : "", giftText, ...quickNotes].filter(Boolean).join(" ") || "Guided entry",
+    evidence_file_name: recordWizard.proofName,
+    evidence_file_type: recordWizard.proofType,
+    evidence_file_data: recordWizard.proofData,
+    source: "guided_entry",
+    reason: "Guided entry"
+  };
+
+  await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
+  selectedTaxYearMemory = String(taxYear);
+  selectedBusinessMemory = String(businessId);
+  await refresh();
+  $("taxYear").value = taxYear;
+  $("recordTaxYear").value = taxYear;
+  $("businessFilter").value = String(businessId);
+  $("simpleBusiness").value = String(businessId);
+  selectedTaxYearMemory = String(taxYear);
+  selectedBusinessMemory = String(businessId);
+  updateBusinessSearchFromSelect();
+  updateExportLink();
+  renderDashboard();
+  renderRecords();
+  renderFactors();
+  showPostSavePanel();
+  toast(isGiftReviewOnly ? "Saved as Review Needed. It is not counted in income or profit/loss yet." : "Saved.");
+}
+
 function setSimpleType(type) {
   $("simpleType").value = type;
   updateSimpleMappingPreview();
@@ -291,7 +1068,7 @@ function dateMatchesTaxYear(dateValue, taxYear) {
 
 function setDateBoundsForTaxYear() {
   const year = $("taxYear")?.value || "";
-  ["simpleDate", "recordDate"].forEach(id => {
+  ["recordDate"].forEach(id => {
     const field = $(id);
     if (!field) return;
     if (year) {
@@ -396,7 +1173,7 @@ function updatePaymentTypeOptions(type = $("simpleType").value) {
   if (!select || !label) return;
   const current = select.value;
   const options = paymentTypeOptions[type] || paymentTypeOptions.cash_expense;
-  label.textContent = type.includes("income") ? "Payment / remittance type" : "Payment method / expense type";
+  label.textContent = type.includes("income") ? "How were you paid?" : "How did you pay?";
   select.innerHTML = options.map(([value, text]) => `<option value="${value}">${text}</option>`).join("");
   if (options.some(([value]) => value === current)) select.value = current;
 }
@@ -516,7 +1293,15 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  if (!response.ok) throw new Error((await response.json()).error || "Request failed");
+  if (!response.ok) {
+    const text = await response.text();
+    try {
+      const parsed = JSON.parse(text);
+      throw new Error(parsed.error || "Request failed");
+    } catch {
+      throw new Error(response.status === 401 ? "Authentication required" : text || "Request failed");
+    }
+  }
   return response.json();
 }
 
@@ -532,12 +1317,13 @@ function activeEntries() {
   });
 }
 
-function entriesForYear(year = $("taxYear").value) {
-  return state.entries.filter(entry => entryMatchesBusiness(entry) && !entry.deleted_at && String(entry.tax_year) === String(year));
+function entriesForYear(year = $("taxYear").value, businessId = selectedBusinessId()) {
+  const selected = Number(businessId || 0);
+  return state.entries.filter(entry => selected && Number(entry.business_id || 0) === selected && !entry.deleted_at && String(entry.tax_year) === String(year));
 }
 
 function selectedBusinessId() {
-  return Number($("businessFilter")?.value || state.businesses[0]?.id || 0);
+  return Number($("businessFilter")?.value || 0);
 }
 
 function entryMatchesBusiness(entry) {
@@ -576,16 +1362,17 @@ function isIncome(entry) {
   return entry.record_type.includes("income");
 }
 
-function totals(year = $("taxYear").value) {
-  const rows = entriesForYear(year);
+function totals(year = $("taxYear").value, businessId = selectedBusinessId()) {
+  const rows = entriesForYear(year, businessId);
   const income = rows.filter(isIncome).reduce((sum, e) => sum + Number(e.amount_usd || 0), 0);
   const expenses = rows.filter(e => !isIncome(e)).reduce((sum, e) => sum + Number(e.amount_usd || 0), 0);
   return { rows, income, expenses, net: income - expenses };
 }
 
-function yearResults() {
+function yearResults(businessId = selectedBusinessId()) {
+  const selected = Number(businessId || 0);
   const grouped = {};
-  state.entries.filter(e => !e.deleted_at && entryMatchesBusiness(e)).forEach(entry => {
+  state.entries.filter(e => selected && !e.deleted_at && Number(e.business_id || 0) === selected).forEach(entry => {
     grouped[entry.tax_year] ||= { income: 0, expenses: 0 };
     grouped[entry.tax_year][isIncome(entry) ? "income" : "expenses"] += Number(entry.amount_usd || 0);
   });
@@ -602,12 +1389,12 @@ function yearHasRecords(row) {
   return Number(row?.income || 0) > 0 || Number(row?.expenses || 0) > 0;
 }
 
-function recentFiveYearWindow() {
+function recentFiveYearWindow(businessId = selectedBusinessId()) {
   if (!$("taxYear").value) return [];
   const selected = Number($("taxYear").value);
   const years = [];
   for (let year = selected - 4; year <= selected; year++) years.push(year);
-  const results = yearResults();
+  const results = yearResults(businessId);
   return years.map(year => {
     const found = results.find(row => Number(row.year) === year);
     return found || { year: String(year), income: 0, expenses: 0, net: 0 };
@@ -639,6 +1426,57 @@ function profitPath(windowRows) {
     lossNarrowing,
     threeLossTrigger,
   };
+}
+
+function readinessFlags(yearTotals = totals()) {
+  const rows = yearTotals.rows || [];
+  const expenseRatio = yearTotals.income > 0 ? yearTotals.expenses / yearTotals.income : yearTotals.expenses > 0 ? 99 : 0;
+  const highExpenseRatio = yearTotals.income > 0 && yearTotals.expenses >= yearTotals.income * 1.5;
+  const quarterMap = {};
+  rows.forEach(entry => {
+    const quarter = quarterFromDate(entry.event_date);
+    if (!quarter) return;
+    quarterMap[quarter] ||= { income: 0, expenses: 0 };
+    if (isIncome(entry)) quarterMap[quarter].income += Number(entry.amount_usd || 0);
+    else quarterMap[quarter].expenses += Number(entry.amount_usd || 0);
+  });
+  const highExpenseQuarters = Object.entries(quarterMap)
+    .filter(([, totals]) => totals.expenses > 0 && (totals.income === 0 || totals.expenses >= totals.income * 1.5))
+    .map(([quarter, totals]) => ({ quarter, ...totals }));
+  const largeExpense = rows.find(entry => !isIncome(entry) && Number(entry.amount_usd || 0) >= 2000);
+  const needsInfo = rows.filter(entry => entryCompletion(entry).label === "Needs info").length;
+  const reviewItems = rows.filter(entry => entry.asset_review && entry.asset_review !== "not_needed").length;
+  const missingProof = rows.filter(entry => !entry.evidence_note && !entry.evidence_file_data && !entry.fmv_method).length;
+  const giftUnsure = rows.some(entry => /Not sure|review needed/i.test(`${entry.fmv_method || ""} ${entry.evidence_note || ""}`));
+  return {
+    expenseRatio,
+    largeExpense,
+    needsInfo,
+    reviewItems,
+    missingProof,
+    giftUnsure,
+    highExpenseRatio,
+    highExpenseQuarters,
+    exaggeratedExpenses: yearTotals.income > 0 && yearTotals.expenses >= yearTotals.income * 2,
+    expensesNoIncome: yearTotals.income === 0 && yearTotals.expenses > 0,
+    hasFlags: Boolean(largeExpense || needsInfo || reviewItems || giftUnsure || highExpenseRatio || highExpenseQuarters.length || (yearTotals.income === 0 && yearTotals.expenses > 0))
+  };
+}
+
+function readinessAlertHtml(yearTotals = totals()) {
+  if (!yearTotals.rows?.length || yearTotals.net >= 0) return "";
+  const flags = readinessFlags(yearTotals);
+  const reasons = [];
+  if (flags.highExpenseQuarters?.length) reasons.push(`${flags.highExpenseQuarters[0].quarter} expenses are heavily outpacing income`);
+  if (flags.highExpenseRatio) reasons.push("money spent is at least 150% of money made");
+  if (flags.exaggeratedExpenses) reasons.push("money spent is much higher than money made");
+  if (flags.expensesNoIncome) reasons.push("expenses are saved but no income is saved for this year");
+  if (flags.largeExpense) reasons.push(`${flags.largeExpense.category || "a larger item"} is ${money.format(flags.largeExpense.amount_usd)}`);
+  if (flags.needsInfo) reasons.push(`${flags.needsInfo} record${flags.needsInfo === 1 ? "" : "s"} need more detail`);
+  if (flags.reviewItems) reasons.push(`${flags.reviewItems} item${flags.reviewItems === 1 ? "" : "s"} are marked for review`);
+  if (flags.giftUnsure) reasons.push("a gift/product or barter item is marked not sure");
+  if (!reasons.length) return "";
+  return `<div class="alert warn"><strong>Bestie Alert:</strong> This year shows a loss and ${escapeHtml(reasons.slice(0, 3).join(", "))}. This does not decide whether your activity is a business or hobby. It means your records may need stronger support. Save receipts, contracts, pitches, platform reports, and notes showing how expenses connect to the business. Review with a qualified tax professional.</div>`;
 }
 
 function documentationCompletenessScore() {
@@ -673,7 +1511,7 @@ function renderTaxYears() {
 }
 
 function renderBusinessFilter() {
-  const selected = selectedBusinessMemory || String(selectedBusinessId());
+  const selected = selectedBusinessMemory || String($("businessFilter")?.value || "");
   const options = state.businesses
     .filter(business => business.active || String(business.id) === selected)
     .map(business => `<option value="${business.id}">${escapeHtml(isPlaceholderBusiness(business) ? "New Business Activity - enter name/type" : business.name)}</option>`)
@@ -683,7 +1521,7 @@ function renderBusinessFilter() {
   $("businessFilter").innerHTML = emptyOption + addOption + options;
   $("recordBusiness").innerHTML = emptyOption + options;
   $("simpleBusiness").innerHTML = emptyOption + options;
-  $("businessFilter").value = state.businesses.some(b => String(b.id) === selected) ? selected : String(state.businesses[0]?.id || "");
+  $("businessFilter").value = state.businesses.some(b => String(b.id) === selected) ? selected : "";
   $("recordBusiness").value = $("businessFilter").value;
   $("simpleBusiness").value = $("businessFilter").value;
   selectedBusinessMemory = $("businessFilter").value;
@@ -692,15 +1530,15 @@ function renderBusinessFilter() {
 }
 
 function renderDashboard() {
-  if (!state.businesses.length) {
+  if (!state.businesses.length || !selectedBusinessId()) {
     $("incomeTotal").textContent = money.format(0);
     $("expenseTotal").textContent = money.format(0);
     $("netTotal").textContent = money.format(0);
     $("profitYears").textContent = "0 losses";
     $("score").textContent = "0%";
     $("scoreBar").style.width = "0%";
-    $("scoreText").textContent = "Add records to measure whether the record file is complete.";
-    $("profitAlert").innerHTML = `<div class="alert"><strong>Start clean:</strong> Add your business/activity, then enter income and expenses as they happen. This creates a live recordkeeping file based on your inputs.</div>`;
+    $("scoreText").textContent = "Start by adding your business/activity and first record.";
+    $("profitAlert").innerHTML = `<div class="alert"><strong>Start clean:</strong> No data is loaded. Add your business/activity, choose the tax year, then save income, expenses, or product/gift records as they happen.</div>`;
     $("yearChart").innerHTML = `<p class="muted">No records yet.</p>`;
     renderProfitLossTable([]);
     if ($("scheduleSummary")) $("scheduleSummary").innerHTML = `<p class="muted">No expenses for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
@@ -744,36 +1582,42 @@ function renderDashboard() {
 }
 
 function updateProfitReviewAccess(path = profitPath(recentFiveYearWindow())) {
-  profitReviewUnlocked = path.threeLossTrigger;
+  profitReviewUnlocked = path.threeLossTrigger || readinessFlags(totals()).hasFlags;
   const nav = document.querySelector('[data-view="factors"]');
   if (nav) nav.classList.toggle("locked", !profitReviewUnlocked);
 }
 
 function renderProfitAlert(rows, path) {
   const el = $("profitAlert");
-  el.innerHTML = profitAlertHtml(path);
+  const early = readinessAlertHtml(totals());
+  el.innerHTML = early || profitAlertHtml(path);
 }
 
 function profitAlertHtml(path) {
   if (!path.recorded.length) {
-    return `<div class="alert"><strong>Start your business story:</strong> Add income, expenses, gifts/barter, crypto, and evidence. The app will watch the profit path as years are added.</div>`;
+    return `<div class="alert"><strong>Start your business story:</strong> Add money made, money spent, products/gifts, and proof. Tax Bestie will watch your business progress as years are added.</div>`;
   }
+  const yearSummary = path.recorded.map(row => {
+    const net = Number(row.net || 0);
+    const label = net < 0 ? "Loss" : net > 0 ? "Profit" : "Break even";
+    return `<li><strong>TY ${escapeHtml(row.year)}:</strong> ${label} ${money.format(net)} <span class="muted">(income ${money.format(row.income || 0)}, expenses ${money.format(row.expenses || 0)})</span></li>`;
+  }).join("");
   const trendBits = [
     path.incomeImproving ? "income is moving up" : "",
     path.lossNarrowing ? "losses are narrowing" : "",
   ].filter(Boolean);
   const trendText = trendBits.length ? ` The current trend shows ${trendBits.join(" and ")}.` : "";
   if (path.threeLossTrigger) {
-    return `<div class="alert risk"><strong>Bestie Alert:</strong> Your completed-year records show losses in ${path.lossRows.length} of the last 5 tax years for ${escapeHtml(businessName(selectedBusinessId()))}. That does not automatically mean it is a hobby, but the IRS may look more closely at whether you are operating with a profit motive.${trendText} If you are treating this as a business, answer the questions below and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Review Profit Motive Factors</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
+    return `<div class="alert risk"><strong>Bestie Alert:</strong> Your saved records show losses in ${path.lossRows.length} of the last 5 completed tax years for ${escapeHtml(businessName(selectedBusinessId()))}. This does not decide whether your activity is a business or hobby. It means your records may need stronger support.${trendText}<ul class="profit-path-list">${yearSummary}</ul>If you are treating this as a business, answer the Business Check-In questions and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Start Business Check-In</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
   }
   if (path.profitRows.length >= 3) {
-    return `<div class="alert good"><strong>Profit pattern note:</strong> Your records show ${path.profitRows.length} profitable years in the selected five-year window. This may support a business pattern, but it is not a guarantee. Keep receipts, contracts, FMV proof, and business-purpose notes current.</div>`;
+    return `<div class="alert good"><strong>Business Progress:</strong> Your records show ${path.profitRows.length} profitable years in the selected five-year lookback.<ul class="profit-path-list">${yearSummary}</ul>Keep receipts, contracts, product/gift value proof, and notes current.</div>`;
   }
   if (path.lossRows.length === 2) {
-    return `<div class="alert warn"><strong>Heads up:</strong> Your completed-year records show 2 loss years in this five-year window. That can happen in a startup phase, but keep documenting income growth, business changes, receipts, and why expenses help the activity make money.${trendText} The 9-question Profit Alert appears if saved records show losses in 3 of 5 completed tax years. Educational record organization only; consult a qualified tax professional.</div>`;
+    return `<div class="alert warn"><strong>Bestie Heads-Up:</strong> Your completed-year records show 2 loss years in this five-year lookback. That can happen while growing, but keep receipts, proof, income efforts, and notes showing what you changed to improve profit.${trendText}<ul class="profit-path-list">${yearSummary}</ul>The Business Check-In appears if saved records show losses in 3 of 5 completed tax years. Educational record organization only; consult a qualified tax professional.</div>`;
   }
   const liveNote = path.currentLive && path.currentLive.net < 0 ? ` Current-year ${path.currentLive.year} is live YTD and is not treated as final until the year closes.` : "";
-  return `<div class="alert"><strong>Profit Path Note:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year window and ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the activity make money."}${liveNote}</div>`;
+  return `<div class="alert"><strong>Business Progress:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year lookback and ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the business make money."}${liveNote}<ul class="profit-path-list">${yearSummary}</ul></div>`;
 }
 
 function renderChart(rows) {
@@ -879,7 +1723,7 @@ function renderRecordsYearSummary() {
     <div class="record-year-summary ${status.className}">
       <div>
         <span>${escapeHtml(label)} result</span>
-        <strong>${escapeHtml(status.label)} ${money.format(Math.abs(t.net))}</strong>
+        <strong>TY ${escapeHtml($("taxYear").value)} ${escapeHtml(resultLabel(t.net))}</strong>
         <p>${escapeHtml(status.explanation)} ${escapeHtml(completionNote)}</p>
       </div>
       <div><span>Income</span><strong>${money.format(t.income)}</strong></div>
@@ -895,7 +1739,8 @@ function renderRecordsProfitNotice(path = profitPath(recentFiveYearWindow())) {
     el.innerHTML = `<div class="alert"><strong>Choose tax year:</strong> Select a tax year to preview the five-year profit/loss pattern and any profit motive prompt.</div>`;
     return;
   }
-  el.innerHTML = profitAlertHtml(path);
+  const early = readinessAlertHtml(totals());
+  el.innerHTML = early || profitAlertHtml(path);
 }
 
 function renderRecordsProfitPreview(rows = recentFiveYearWindow()) {
@@ -906,15 +1751,11 @@ function renderRecordsProfitPreview(rows = recentFiveYearWindow()) {
     return;
   }
   const savedRows = rows.filter(yearHasRecords);
-  const emptyYears = rows.filter(row => !yearHasRecords(row)).map(row => row.year);
   if (!savedRows.length) {
-    el.innerHTML = `<div class="alert"><strong>Five-Year Review Window:</strong> ${rows.map(row => row.year).join(", ")}. No saved records yet in this selected window.</div>`;
+    el.innerHTML = `<div class="alert"><strong>No saved records yet:</strong> Add business income, business expenses, or product/gift records for this tax year to see profit or loss progress.</div>`;
     return;
   }
-  const emptyNote = emptyYears.length
-    ? `<p class="muted">Five-year review window also includes ${emptyYears.join(", ")} with no saved records. Those years are shown for Section 183 context only; they are not stored income or expense records.</p>`
-    : "";
-  el.innerHTML = `<h4 class="mini-heading">Tax Years With Saved Records In This Five-Year Window</h4>${emptyNote}<table><thead><tr><th>Tax Year</th><th>Income</th><th>Expenses</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${savedRows.map(row => {
+  el.innerHTML = `<h4 class="mini-heading">Tax Years With Saved Records</h4><table><thead><tr><th>Tax Year</th><th>Income</th><th>Expenses</th><th>Profit / Loss</th><th>Status</th></tr></thead><tbody>${savedRows.map(row => {
     const net = Number(row.net || 0);
     const current = Number(state.settings.current_tax_year || new Date().getFullYear());
     const status = Number(row.year) === current ? "Live YTD" : net < 0 ? "Loss year" : net > 0 ? "Profit year" : "Break even";
@@ -982,6 +1823,10 @@ function renderRecords() {
   renderRecordsYearSummary();
   renderRecordsProfitNotice(path);
   renderRecordsProfitPreview(windowRows);
+  if (!selectedBusinessId() || !$("taxYear")?.value) {
+    $("recordsTable").innerHTML = `<p class="muted">No records listed. Choose a business/activity and tax year, then add your first record.</p>`;
+    return;
+  }
   $("recordsTable").innerHTML = rows.length ? `<table><thead><tr><th>Business</th><th>Year</th><th>Date</th><th>Status</th><th>Type</th><th>Amount</th><th>Use %</th><th>Schedule C</th><th>Category</th><th>Evidence</th><th>Actions</th></tr></thead><tbody>${rows.map(entry => {
     const completion = entryCompletion(entry);
     return `
@@ -996,7 +1841,7 @@ function renderRecords() {
       <td>${lineLabel(entry.schedule_line)}</td>
       <td>${escapeHtml(entry.category)}<br><span class="muted">${escapeHtml(entry.description)}</span></td>
       <td>${escapeHtml(entry.evidence_note || entry.fmv_method || entry.shared_use_note || "")}${entry.evidence_file_data ? `<br><a href="${entry.evidence_file_data}" target="_blank" rel="noreferrer">View evidence</a>` : ""}</td>
-      <td><div class="row-actions">${entry.deleted_at ? `<button class="small" data-restore="${entry.id}">Restore</button>` : `<button class="small" data-edit="${entry.id}">Edit</button><button class="small icon-button danger" data-delete="${entry.id}" aria-label="Delete record ${entry.id}" title="Delete this record"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg><span class="sr-only">Delete</span></button>`}</div></td>
+      <td><div class="row-actions">${entry.deleted_at ? `<button class="small" data-restore="${entry.id}" title="Restore this deleted record">Restore</button>` : `<button class="small" data-edit="${entry.id}" title="Edit this saved record">Edit</button><button class="small danger" data-delete="${entry.id}" title="Delete this record. It stays in recordkeeping history.">Delete</button>`}</div></td>
     </tr>`;
   }).join("")}</tbody></table>` : `<p class="muted">No records for ${escapeHtml(selectedTaxYearStatus())}.</p>`;
 }
@@ -1195,14 +2040,18 @@ function renderFactors() {
   const hobby = $("hobbyTreatmentIntro");
   const topButton = $("saveFactors");
   const bottomButton = $("saveFactorsBottom");
+  const backButton = $("factorBack");
+  const nextButton = $("factorNext");
   const bottomWrap = document.querySelector(".factor-save-bottom");
+  const progress = $("checkinProgress");
   if (!profitReviewUnlocked) {
     intro?.classList.add("field-hidden");
     hobby?.classList.add("field-hidden");
     topButton?.classList.add("field-hidden");
     bottomWrap?.classList.add("field-hidden");
+    progress?.classList.add("field-hidden");
     if ($("factorSummary")) {
-      $("factorSummary").innerHTML = `<div class="alert"><strong>No Profit Review needed yet.</strong> Keep capturing records. The app will prompt you if saved records show losses in 3 of 5 completed tax years for this business/activity. Educational record organization only.</div>`;
+      $("factorSummary").innerHTML = `<div class="alert"><strong>No Business Check-In needed yet.</strong> Keep saving money made, money spent, products/gifts, and proof. Tax Bestie will prompt you when the records show repeated losses or a year that needs stronger support. Educational record organization only.</div>`;
     }
     $("factorList").innerHTML = "";
     return;
@@ -1211,22 +2060,70 @@ function renderFactors() {
   hobby?.classList.remove("field-hidden");
   topButton?.classList.remove("field-hidden");
   bottomWrap?.classList.remove("field-hidden");
+  progress?.classList.remove("field-hidden");
   const factors = factorsForBusiness();
+  currentFactorIndex = Math.max(0, Math.min(currentFactorIndex, factors.length - 1));
   if (profitReviewSubmitted) {
+    progress?.classList.add("field-hidden");
+    $("factorList").innerHTML = "";
+    if (backButton) backButton.classList.add("field-hidden");
+    if (nextButton) nextButton.classList.add("field-hidden");
+    if (topButton) topButton.classList.add("field-hidden");
+    if (bottomButton) bottomButton.textContent = "Update Saved Check-In";
     renderFactorSummary(factors);
-  } else if ($("factorSummary")) {
-    $("factorSummary").innerHTML = `<div class="alert risk"><strong>Bestie Alert:</strong> Your records show a repeated loss pattern. Answer the questions below, then click <strong>Submit Review</strong> to generate an educational discussion summary for you and a qualified tax professional. This is record organization only, not tax advice.</div>`;
+    return;
   }
-  $("factorList").innerHTML = factors.map((factor, index) => `<div class="factor">
+
+  if (backButton) backButton.classList.remove("field-hidden");
+  if (nextButton) nextButton.classList.remove("field-hidden");
+  if (bottomButton) bottomButton.textContent = "Save & Finish Later";
+  const path = profitPath(recentFiveYearWindow());
+  const isRepeatedLoss = path.lossRows.length >= 3;
+  if ($("factorSummary")) {
+    $("factorSummary").innerHTML = `<div class="alert ${isRepeatedLoss ? "risk" : "warn"}"><strong>${isRepeatedLoss ? "Bestie Alert" : "Bestie Heads-Up"}:</strong> ${isRepeatedLoss ? "Your saved records show losses in 3 of the last 5 completed tax years." : "This year has records that may need stronger support."} Answer one question at a time. When you finish, Tax Bestie creates an educational discussion summary you can review with a qualified tax professional.</div>`;
+  }
+  const factor = factors[currentFactorIndex];
+  const index = Number(factor.factor_no) - 1;
+  const percent = Math.round(((currentFactorIndex + 1) / factors.length) * 100);
+  if ($("checkinProgressText")) $("checkinProgressText").textContent = `Question ${currentFactorIndex + 1} of ${factors.length}`;
+  if ($("checkinProgressPercent")) $("checkinProgressPercent").textContent = `${percent}% complete`;
+  if ($("checkinProgressFill")) $("checkinProgressFill").style.width = `${percent}%`;
+  if (backButton) backButton.disabled = currentFactorIndex === 0;
+  if (nextButton) nextButton.textContent = currentFactorIndex === factors.length - 1 ? "Finish & Show Summary" : "Next";
+  $("factorList").innerHTML = `<div class="factor single-factor">
     <div class="num">${factor.factor_no}</div>
     <div><h4>${factorText[index][0]} <button class="info" data-tip="${escapeHtml(factorText[index][1])}">i</button></h4><p class="muted">${factorText[index][1]}</p></div>
-    <select data-factor-answer="${factor.factor_no}">
-      <option value="yes" ${factor.answer === "yes" ? "selected" : ""}>Yes</option>
-      <option value="mixed" ${factor.answer === "mixed" ? "selected" : ""}>Mixed</option>
-      <option value="no" ${factor.answer === "no" ? "selected" : ""}>No</option>
-    </select>
-    <textarea data-factor-note="${factor.factor_no}" placeholder="Evidence notes, documents, business changes, advisor input">${escapeHtml(factor.note || "")}</textarea>
-  </div>`).join("");
+    <div class="checkin-choices" role="group" aria-label="${escapeHtml(factorText[index][0])}">
+      <button type="button" class="${factor.answer === "yes" ? "selected" : ""}" data-factor-choice="${factor.factor_no}" data-answer="yes">Yes</button>
+      <button type="button" class="${factor.answer === "mixed" ? "selected" : ""}" data-factor-choice="${factor.factor_no}" data-answer="mixed">Not sure / partly</button>
+      <button type="button" class="${factor.answer === "no" ? "selected" : ""}" data-factor-choice="${factor.factor_no}" data-answer="no">No</button>
+    </div>
+    <textarea data-factor-note="${factor.factor_no}" placeholder="Optional: add a short note, receipt type, business change, or proof you have">${escapeHtml(factor.note || "")}</textarea>
+  </div>`;
+}
+
+function setFactorAnswer(factorNo, answer, note = null) {
+  const businessId = selectedBusinessId();
+  const existing = state.factors.find(factor => Number(factor.business_id) === businessId && Number(factor.factor_no) === Number(factorNo));
+  if (existing) {
+    existing.answer = answer;
+    if (note !== null) existing.note = note;
+    return;
+  }
+  state.factors.push({
+    business_id: businessId,
+    factor_no: Number(factorNo),
+    answer,
+    note: note || ""
+  });
+}
+
+function captureCurrentFactorInput() {
+  const factor = factorsForBusiness()[currentFactorIndex];
+  if (!factor) return;
+  const note = document.querySelector(`[data-factor-note="${factor.factor_no}"]`)?.value || factor.note || "";
+  const answer = state.factors.find(item => Number(item.business_id) === selectedBusinessId() && Number(item.factor_no) === Number(factor.factor_no))?.answer || factor.answer || "mixed";
+  setFactorAnswer(factor.factor_no, answer, note);
 }
 
 function factorAnswerCounts(factors = factorsForBusiness()) {
@@ -1275,7 +2172,7 @@ function renderFactorSummary(factors = factorsForBusiness()) {
     counts.notes < 3 ? "Several answers need more written support or documentation." : "Several answers include notes that can help organize the record file."
   ].filter(Boolean);
   el.innerHTML = `<div class="alert ${className}">
-    <strong>Profit Motive Discussion Summary:</strong> ${strength}.
+    <strong>Business Check-In Summary:</strong> ${strength}.
     <p>${escapeHtml(lossText)}</p>
     <p>Yes: ${counts.yes}; Mixed: ${counts.mixed}; No: ${counts.no}; notes added: ${counts.notes}.</p>
     <p>${escapeHtml(supportingText)}</p>
@@ -1298,23 +2195,29 @@ function renderSettings() {
   $("settingDisclaimer").value = state.settings.disclaimer || "";
 }
 
-async function saveProfitReview() {
+async function saveProfitReview(options = {}) {
   if (!profitReviewUnlocked) {
-    toast("Profit review appears after a 3-out-of-5 loss pattern.");
+    toast("Business Check-In appears when saved records show repeated losses or a year that needs stronger support.");
     return;
   }
+  captureCurrentFactorInput();
+  const complete = Boolean(options.complete);
   const factors = factorsForBusiness().map(factor => ({
     factor_no: factor.factor_no,
-    answer: document.querySelector(`[data-factor-answer="${factor.factor_no}"]`).value,
-    note: document.querySelector(`[data-factor-note="${factor.factor_no}"]`).value
+    answer: factor.answer || "mixed",
+    note: factor.note || ""
   }));
-  profitReviewSubmitted = true;
+  profitReviewSubmitted = complete;
   await api("/api/factors", { method: "PUT", body: JSON.stringify({ business_id: selectedBusinessId(), factors }) });
   await refresh();
   document.querySelector('[data-view="factors"]').click();
-  renderFactorSummary(factors);
-  $("factorSummary")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  toast("Review submitted. Discussion summary updated.");
+  if (complete) {
+    renderFactorSummary(factors);
+    $("factorSummary")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    toast("Check-In finished. Discussion summary updated.");
+  } else {
+    toast("Check-In saved. You can finish it later.");
+  }
 }
 
 function renderAll() {
@@ -1324,6 +2227,7 @@ function renderAll() {
   renderRecords();
   renderAudit();
   renderFactors();
+  renderRecordWizard();
 }
 
 function labelType(type) {
@@ -1332,7 +2236,8 @@ function labelType(type) {
     cash_expense: "Cash expense",
     noncash_income: "Non-cash / FMV",
     crypto_income: "Crypto income",
-    crypto_expense: "Crypto expense"
+    crypto_expense: "Crypto expense",
+    review_note: "Review needed"
   }[type] || type;
 }
 
@@ -1466,7 +2371,7 @@ function editRecord(id) {
   $("editReason").value = "";
   $("scheduleLine").dataset.manual = "true";
   updateAdvancedCounterpartyLabel();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  goToView("capture", "Add Record", "Answer one question at a time to save income, expenses, products, gifts, or barter.");
 }
 
 function resetForm() {
@@ -1521,12 +2426,46 @@ function clearSimpleEntryFields() {
   toast("Entry cleared. Tax year, business, and entry type stayed selected.");
 }
 
+async function resetAllSavedData() {
+  const confirmText = prompt("This clears all saved businesses, records, receipts, profit review answers, and recordkeeping history from this app. Type RESET to continue.");
+  if (confirmText !== "RESET") {
+    toast("Reset canceled.");
+    return;
+  }
+  try {
+    await api("/api/reset", { method: "POST", body: JSON.stringify({ confirm: "RESET" }) });
+    selectedBusinessMemory = "";
+    selectedTaxYearMemory = "";
+    profitReviewSubmitted = false;
+    currentFactorIndex = 0;
+    profitReviewUnlocked = false;
+    if ($("showAllYears")) $("showAllYears").checked = false;
+    if ($("showDeleted")) $("showDeleted").checked = false;
+    await refresh({ preserveSelection: false });
+    wizardReset();
+    toast("All saved data cleared.");
+  } catch (error) {
+    toast(errorMessage(error));
+  }
+}
+
 function showPostSavePanel() {
-  const panel = $("postSavePanel");
+  const panel = $("wizardPostSavePanel") || $("postSavePanel");
   if (!panel) return;
   const year = $("taxYear").value || "this tax year";
   const business = $("businessFilter").value ? businessName($("businessFilter").value) : "this business";
-  $("postSaveText").textContent = `Add another item for ${business} in ${year}, or complete the tax-year review.`;
+  const typeText = recordWizard.type === "cash_income"
+      ? "income"
+      : recordWizard.type === "cash_expense"
+        ? "expense"
+        : "product/gift";
+  const crossPrompt = recordWizard.type === "cash_income"
+    ? "Do you have any business expenses or product/gift income to add for this same tax year?"
+    : recordWizard.type === "cash_expense"
+      ? "Do you have any business income, product/gift income, or another expense to add for this same tax year?"
+      : "Do you have any income or expenses to add for this same tax year?";
+  if ($("wizardPostSaveText")) $("wizardPostSaveText").textContent = `Saved ${typeText} for ${business} in TY ${year}. ${crossPrompt}`;
+  if ($("postSaveText")) $("postSaveText").textContent = `Add another item for ${business} in ${year}, or complete the tax-year review.`;
   panel.classList.remove("field-hidden");
 }
 
@@ -1593,7 +2532,7 @@ function editBusinessRecord(id) {
   delete $("businessType").dataset.autoFilled;
   $("businessDescription").value = business.description || "";
   $("businessActive").checked = Boolean(business.active);
-  showView("businesses", "Business Setup", "Add or edit the business/activity before recording income and expenses.");
+  goToView("businesses", "Business Setup", "Add or edit the business/activity before recording income and expenses.");
 }
 
 function resetBusinessForm() {
@@ -1602,7 +2541,7 @@ function resetBusinessForm() {
   $("businessId").value = "";
   delete $("businessType").dataset.autoFilled;
   $("businessActive").checked = true;
-  showView("businesses", "Business Setup", "Add or edit the business/activity before recording income and expenses.");
+  goToView("businesses", "Business Setup", "Add or edit the business/activity before recording income and expenses.");
   setTimeout(() => $("businessName").focus(), 30);
 }
 
@@ -1646,30 +2585,50 @@ function showView(view, title, subtitle) {
   if (subtitle) $("viewSub").textContent = subtitle;
 }
 
+function focusApp() {
+  const target = document.querySelector("main") || document.querySelector(".app");
+  requestAnimationFrame(() => {
+    target?.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
+}
+
+function goToView(view, title, subtitle) {
+  showView(view, title, subtitle);
+  focusApp();
+}
+
 function enterApp(view = "dashboard") {
   const labels = {
     dashboard: ["Home", "Choose the business and tax year, then add records as money moves."],
-    records: ["Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context."],
-    factors: ["Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected."],
+    capture: ["Add Record", "Answer one question at a time to save income, expenses, products, gifts, or barter."],
+    records: ["Progress", "Review saved records, yearly profit or loss, missing info, and five-year context."],
+    factors: ["Bestie Alert", "Answer one simple question at a time when your records need a closer profit motive review."],
     imports: ["More", "Optional import, export, reset, and advanced tools."]
   };
   const selected = labels[view] || labels.dashboard;
-  showView(view, selected[0], selected[1]);
+  goToView(view, selected[0], selected[1]);
 }
 
 document.querySelectorAll(".nav").forEach(button => {
   button.addEventListener("click", () => {
     const labels = {
       dashboard: ["Home", "Choose the business and tax year, then add records as money moves."],
-      records: ["Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context."],
-      factors: ["Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected."],
+      capture: ["Add Record", "Answer one question at a time to save income, expenses, products, gifts, or barter."],
+      records: ["Progress", "Review saved records, yearly profit or loss, missing info, and five-year context."],
+      factors: ["Bestie Alert", "Answer one simple question at a time when your records need a closer profit motive review."],
       imports: ["More", "Optional import, export, reset, and advanced tools."]
     };
-    showView(button.dataset.view, labels[button.dataset.view][0], labels[button.dataset.view][1]);
+    goToView(button.dataset.view, labels[button.dataset.view][0], labels[button.dataset.view][1]);
+    if (button.dataset.view === "capture") renderRecordWizard();
+    if (button.dataset.view === "records") {
+      renderRecords();
+      renderAudit();
+    }
+    if (button.dataset.view === "factors") renderFactors();
   });
 });
 
-$("enterApp").addEventListener("click", () => enterApp("dashboard"));
+$("enterApp").addEventListener("click", () => showGuidedEntry());
 $("previewApp").addEventListener("click", () => enterApp("records"));
 
 ["recordType", "recordCategory", "description"].forEach(id => {
@@ -1704,6 +2663,89 @@ document.querySelectorAll("[data-simple-preset]").forEach(button => {
   button.addEventListener("click", () => setSimpleType(button.dataset.simplePreset));
 });
 
+document.body.addEventListener("input", (event) => {
+  if (event.target?.dataset?.wizardDatePart) {
+    const part = event.target.dataset.wizardDatePart;
+    const cleaned = event.target.value.replace(/\D/g, "").slice(0, 2);
+    event.target.value = cleaned;
+    recordWizard[part === "month" ? "dateMonth" : "dateDay"] = cleaned;
+    syncWizardDateParts();
+    renderWizardLivePreview();
+    return;
+  }
+  if (event.target?.dataset?.wizardInput) {
+    recordWizard[event.target.dataset.wizardInput] = event.target.value;
+    if (event.target.dataset.wizardInput === "what" && recordWizard.type === "cash_expense") {
+      updateWizardMappingHint();
+    }
+    renderWizardLivePreview();
+  }
+});
+
+document.body.addEventListener("click", (event) => {
+  const startType = event.target.closest("[data-wizard-start-type]");
+  if (!startType) return;
+  const selectedName = recordWizard.businessName || ($("businessFilter")?.value ? businessName($("businessFilter").value) : "");
+  showGuidedEntry();
+  startWizardType(startType.dataset.wizardStartType || "", { keepBusinessName: selectedName });
+  recordWizard.businessName = selectedName;
+  recordWizard.step = recordWizard.type ? 1 : 0;
+  renderRecordWizard();
+});
+
+$("recordWizardBack").addEventListener("click", () => {
+  syncWizardInput();
+  recordWizard.step = Math.max(0, recordWizard.step - 1);
+  renderRecordWizard();
+});
+
+$("recordWizardNext").addEventListener("click", async () => {
+  syncWizardInput();
+  if (currentWizardStep() === "proof") await readWizardProof();
+  const error = validateWizardStep();
+  if (error) {
+    toast(error);
+    return;
+  }
+  recordWizard.step = Math.min(recordWizard.step + 1, wizardSteps().length - 1);
+  renderRecordWizard();
+});
+
+$("recordWizardReset").addEventListener("click", () => wizardReset());
+$("recordWizardSave").addEventListener("click", async () => {
+  try {
+    await saveWizardRecord();
+  } catch (error) {
+    toast(errorMessage(error));
+  }
+});
+document.querySelectorAll("[data-post-add-type]").forEach(button => {
+  button.addEventListener("click", () => {
+    $("wizardPostSavePanel")?.classList.add("field-hidden");
+    const selectedName = $("businessFilter")?.value ? businessName($("businessFilter").value) : recordWizard.businessName;
+    startWizardType(button.dataset.postAddType, { keepBusinessName: selectedName });
+    recordWizard.businessName = selectedName;
+    recordWizard.step = 1;
+    renderRecordWizard();
+  });
+});
+document.querySelectorAll("[data-new-record-different-year]").forEach(button => {
+  button.addEventListener("click", () => {
+    $("wizardPostSavePanel")?.classList.add("field-hidden");
+    $("postSavePanel")?.classList.add("field-hidden");
+    showGuidedEntry();
+    wizardReset();
+    setTimeout(() => $("taxYear")?.focus(), 60);
+    toast("Choose the tax year for the new record, then tap Add.");
+  });
+});
+$("wizardCompleteYearReview").addEventListener("click", () => {
+  $("wizardPostSavePanel")?.classList.add("field-hidden");
+  goToView("records", "Progress", "Review saved records, yearly profit or loss, missing info, and five-year context.");
+  renderRecords();
+  renderAudit();
+});
+
 $("scheduleLine").addEventListener("change", () => {
   $("scheduleLine").dataset.manual = "true";
   $("scheduleHint").textContent = `Selected: ${lineLabel($("scheduleLine").value)}.`;
@@ -1721,20 +2763,24 @@ $("simpleEvidenceFile").addEventListener("change", () => {
 
 $("openAdvancedForm").addEventListener("click", () => {
   $("recordForm").classList.toggle("advanced-hidden");
-  $("openAdvancedForm").textContent = $("recordForm").classList.contains("advanced-hidden") ? "Use Advanced Fields" : "Hide Advanced Fields";
+  document.querySelector(".advanced-record-panel")?.classList.toggle("field-hidden", $("recordForm").classList.contains("advanced-hidden"));
+  $("openAdvancedForm").textContent = $("recordForm").classList.contains("advanced-hidden") ? "Add Tax-Pro Details" : "Hide Tax-Pro Details";
 });
 $("clearSimpleForm").addEventListener("click", clearSimpleEntryFields);
+$("clearEntryTopBtn").addEventListener("click", () => {
+  showGuidedEntry();
+  wizardReset();
+});
+$("resetAllDataTopBtn").addEventListener("click", resetAllSavedData);
 $("addMoreEntry").addEventListener("click", () => {
   $("postSavePanel")?.classList.add("field-hidden");
-  clearSimpleEntryFields();
-  setTimeout(() => $("simpleDate").focus(), 50);
+  startWizardType(recordWizard.type);
 });
 $("completeYearReview").addEventListener("click", () => {
   $("postSavePanel")?.classList.add("field-hidden");
-  showView("records", "Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context.");
+  goToView("records", "Progress", "Review saved records, yearly profit or loss, missing info, and five-year context.");
   renderRecords();
   renderAudit();
-  window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
 document.querySelectorAll("[data-allocation]").forEach(button => {
@@ -1745,54 +2791,45 @@ document.querySelectorAll("[data-allocation]").forEach(button => {
 
 document.querySelectorAll("[data-quick-type]").forEach(button => {
   button.addEventListener("click", () => {
-    showView("capture", "Add Record", "Save one income, expense, product/gift/barter, or business crypto payment.");
-    resetSimpleForm();
-    setSimpleType(button.dataset.quickType);
+    const selectedName = recordWizard.businessName || ($("businessFilter")?.value ? businessName($("businessFilter").value) : "");
+    showGuidedEntry();
+    startWizardType(button.dataset.quickType, { keepBusinessName: selectedName });
   });
 });
 
 if ($("resetWalkthroughBtn")) {
-  $("resetWalkthroughBtn").addEventListener("click", async () => {
-    const confirmText = prompt("This clears saved businesses, records, receipts, profit review answers, and recordkeeping history from this app. Type RESET to continue.");
-    if (confirmText !== "RESET") {
-      toast("Reset canceled.");
-      return;
-    }
-    try {
-      await api("/api/reset", { method: "POST", body: JSON.stringify({ confirm: "RESET" }) });
-      selectedBusinessMemory = "";
-      selectedTaxYearMemory = "";
-      if ($("showAllYears")) $("showAllYears").checked = false;
-      if ($("showDeleted")) $("showDeleted").checked = false;
-      await refresh({ preserveSelection: false });
-      toast("Data cleared.");
-    } catch (error) {
-      toast(errorMessage(error));
-    }
-  });
+  $("resetWalkthroughBtn").addEventListener("click", resetAllSavedData);
 }
 
 $("addRecordBtn").addEventListener("click", () => {
-  showView("capture", "Add Record", "Save one income, expense, product/gift/barter, or business crypto payment.");
-  resetSimpleForm();
-  setTimeout(() => $("simpleAmount").focus(), 50);
+  const wasOnCapture = document.body.dataset.view === "capture";
+  showGuidedEntry();
+  if (!wasOnCapture) {
+    wizardReset();
+  } else {
+    renderRecordWizard();
+  }
 });
 
 $("taxYear").addEventListener("change", () => {
   selectedTaxYearMemory = $("taxYear").value;
   profitReviewSubmitted = false;
+  currentFactorIndex = 0;
   $("recordTaxYear").value = $("taxYear").value;
   setDateBoundsForTaxYear();
-  clearMismatchedDate("simpleDate");
   clearMismatchedDate("recordDate");
+  recordWizard.date = "";
+  recordWizard.dateMonth = "";
+  recordWizard.dateDay = "";
   updateExportLink();
   renderDashboard();
   renderRecords();
   renderAudit();
   renderFactors();
+  if (document.body.dataset.view === "capture") renderRecordWizard();
 });
 
-$("simpleDate").addEventListener("change", () => clearMismatchedDate("simpleDate"));
+$("simpleDate").addEventListener("change", () => {});
 $("recordDate").addEventListener("change", () => clearMismatchedDate("recordDate", $("recordTaxYear").value || $("taxYear").value));
 $("recordTaxYear").addEventListener("change", () => {
   if ($("recordTaxYear").value) {
@@ -1804,6 +2841,7 @@ $("recordTaxYear").addEventListener("change", () => {
 
 $("businessFilter").addEventListener("change", () => {
   profitReviewSubmitted = false;
+  currentFactorIndex = 0;
   if ($("businessFilter").value === "__new__") {
     selectedBusinessMemory = "";
     $("businessFilter").value = "";
@@ -1869,6 +2907,7 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
   const whatValue = $("simpleWhat").value.trim();
   const purposeValue = $("simplePurpose").value.trim();
   const paymentText = paymentTypeLabel(type, paymentValue);
+  const amountNumber = Number(moneyFieldValue("simpleAmount") || 0);
   const category = whatValue || (derivedType.includes("income") ? paymentText || "Income" : type === "cash_expense" || type === "crypto_expense" ? "Needs info" : "Needs info");
   const description = purposeValue || (derivedType.includes("income") ? paymentText : "");
   const giftContext = updateGiftReviewUI(type, `${category} ${description}`.toLowerCase());
@@ -1884,7 +2923,16 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
     unsure: "Gift/product question: Not sure; review needed with a qualified tax professional.",
   }[giftStatus] || "";
   const file = await readFileInput("simpleEvidenceFile");
-  const needsAssetReview = cryptoStatus === "yes" || giftStatus === "unsure" || category.toLowerCase().match(/computer|camera|mic|microphone|phone|equipment|laptop/);
+  const simpleSignals = expenseReviewSignals(`${category} ${description}`.toLowerCase());
+  const reviewNotes = expenseReviewNote(simpleSignals, amountNumber, `${category} ${description}`);
+  const quickNotes = [];
+  if (derivedType === "cash_expense" || derivedType === "crypto_expense") {
+    quickNotes.push(...reviewNotes.map(note => `Bestie Quick Check: ${note}`));
+  }
+  if (derivedType === "noncash_income" || giftStatus === "yes" || giftStatus === "unsure") {
+    quickNotes.push("Bestie Quick Check: save fair market value support and whether the product/gift was received for a post, review, service, or promotion.");
+  }
+  const needsAssetReview = cryptoStatus === "yes" || giftStatus === "unsure" || simpleSignals.meal || simpleSignals.vehicle || simpleSignals.homeOffice || ((simpleSignals.asset || /vehicle|car|truck|van/i.test(category)) && amountNumber >= 2000);
   const cryptoText = cryptoStatus === "yes" ? "Crypto question: Yes, received as a business payment. USD FMV at receipt included in business income. Later sale/spend gain-loss is outside this MVP and should be reviewed with a qualified tax professional." : "";
   const fmvMethod = derivedType === "noncash_income" || derivedType.includes("crypto") || giftStatus === "yes" || giftStatus === "unsure"
     ? `${fmvEvidenceText} ${giftStatusText} ${cryptoText}`.trim()
@@ -1911,7 +2959,7 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
       crypto_amount: "",
       crypto_wallet: "",
       transaction_hash: "",
-      evidence_note: [paymentText ? `Payment/remittance type: ${paymentText}.` : "", purposeValue, giftStatusText, cryptoText].filter(Boolean).join(" ") || "Quick capture",
+      evidence_note: [paymentText ? `Payment/remittance type: ${paymentText}.` : "", purposeValue, giftStatusText, cryptoText, ...quickNotes].filter(Boolean).join(" ") || "Quick capture",
       evidence_file_name: file.name,
       evidence_file_type: file.type,
       evidence_file_data: file.data,
@@ -1919,12 +2967,16 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
       reason: "Simple entry"
     };
     await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
+    selectedTaxYearMemory = String(keepYear);
+    selectedBusinessMemory = String(businessId);
     await refresh();
     $("taxYear").value = keepYear;
     $("recordTaxYear").value = keepYear;
     $("simpleType").value = keepType;
     $("simpleBusiness").value = String(businessId);
     $("businessFilter").value = String(businessId);
+    selectedTaxYearMemory = String(keepYear);
+    selectedBusinessMemory = String(businessId);
     updateBusinessSearchFromSelect();
     clearSimpleEntryFields();
     showPostSavePanel();
@@ -1949,6 +3001,39 @@ document.body.addEventListener("click", async (event) => {
   const restore = event.target.dataset.restore;
   const startReview = event.target.dataset.startReview;
   const portalAction = event.target.dataset.portalAction;
+  const factorChoice = event.target.dataset.factorChoice;
+  const wizardChoice = event.target.closest("[data-wizard-choice]");
+  if (wizardChoice) {
+    const field = wizardChoice.dataset.wizardChoice;
+    recordWizard[field] = wizardChoice.dataset.value || "";
+    if (field === "type") {
+      recordWizard.payment = "";
+      recordWizard.giftStatus = "";
+      recordWizard.date = "";
+      recordWizard.what = "";
+      recordWizard.amount = "";
+      recordWizard.who = "";
+      recordWizard.proofChoice = "";
+      recordWizard.proofName = "";
+      recordWizard.proofType = "";
+      recordWizard.proofData = "";
+    }
+    renderWizardLivePreview();
+    const error = validateWizardStep();
+    if (error) {
+      renderRecordWizard();
+      return;
+    }
+    recordWizard.step = Math.min(recordWizard.step + 1, wizardSteps().length - 1);
+    renderRecordWizard();
+    return;
+  }
+  if (factorChoice) {
+    const note = document.querySelector(`[data-factor-note="${factorChoice}"]`)?.value || "";
+    setFactorAnswer(factorChoice, event.target.dataset.answer || "mixed", note);
+    renderFactors();
+    return;
+  }
   if (portalAction) {
     if (portalAction === "export") {
       window.location.href = "/api/export.csv";
@@ -1956,21 +3041,23 @@ document.body.addEventListener("click", async (event) => {
     }
     if (["records", "factors"].includes(portalAction)) {
       const labels = portalAction === "records"
-        ? ["Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context."]
-        : ["Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected."];
-      showView(portalAction, labels[0], labels[1]);
+        ? ["Progress", "Review saved records, yearly profit or loss, missing info, and five-year context."]
+        : ["Bestie Alert", "Answer one simple question at a time when your records need a closer profit motive review."];
+      goToView(portalAction, labels[0], labels[1]);
       return;
     }
-    showView("records", "Year Review", "Review saved records, yearly profit or loss, missing info, and five-year context.");
+    goToView("records", "Progress", "Review saved records, yearly profit or loss, missing info, and five-year context.");
     resetSimpleForm();
     setSimpleType(portalAction === "cash_expense" || portalAction === "cash_income" || portalAction === "noncash_income" ? portalAction : "cash_expense");
     return;
   }
   if (startReview) {
     profitReviewUnlocked = true;
+    currentFactorIndex = 0;
+    profitReviewSubmitted = false;
     renderFactors();
-    showView("factors", "Profit Alert", "The 9 questions appear only after a 3-out-of-5 completed loss pattern is detected.");
-    toast("Showing the 9-factor educational review for this business.");
+    goToView("factors", "Bestie Alert", "Answer one simple question at a time when your records need a closer profit motive review.");
+    toast("Showing the Business Check-In.");
   }
   if (edit) editRecord(edit);
   if (editBusiness) editBusinessRecord(editBusiness);
@@ -1988,8 +3075,22 @@ document.body.addEventListener("click", async (event) => {
   }
 });
 
-$("saveFactors").addEventListener("click", saveProfitReview);
-$("saveFactorsBottom").addEventListener("click", saveProfitReview);
+$("saveFactors").addEventListener("click", () => saveProfitReview({ complete: false }));
+$("saveFactorsBottom").addEventListener("click", () => saveProfitReview({ complete: false }));
+$("factorBack").addEventListener("click", () => {
+  captureCurrentFactorInput();
+  currentFactorIndex = Math.max(0, currentFactorIndex - 1);
+  renderFactors();
+});
+$("factorNext").addEventListener("click", async () => {
+  captureCurrentFactorInput();
+  if (currentFactorIndex >= factorText.length - 1) {
+    await saveProfitReview({ complete: true });
+    return;
+  }
+  currentFactorIndex += 1;
+  renderFactors();
+});
 
 $("businessForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -2012,8 +3113,10 @@ $("businessForm").addEventListener("submit", async (event) => {
     description: $("businessDescription").value || (suggestion ? `User selected suggested activity.` : ""),
     active: $("businessActive").checked
   };
-  if (id) await api(`/api/businesses/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-  else await api("/api/businesses", { method: "POST", body: JSON.stringify(payload) });
+  const saved = id
+    ? await api(`/api/businesses/${id}`, { method: "PUT", body: JSON.stringify(payload) })
+    : await api("/api/businesses", { method: "POST", body: JSON.stringify(payload) });
+  selectedBusinessMemory = String(saved.id || id || "");
   await refresh();
   toast(id ? "Business updated." : "Business added.");
 });

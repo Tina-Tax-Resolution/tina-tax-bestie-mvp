@@ -76,8 +76,6 @@ Add environment variables:
 
 ```text
 DATA_DIR=/var/data
-APP_USER=tina
-APP_PASSWORD=<choose a strong private password>
 ```
 
 If you are on Render free/no-disk mode for a temporary demo, do not use `/var/data` unless a disk is actually mounted there. Remove `DATA_DIR` or use:
@@ -88,16 +86,15 @@ DATA_DIR=/tmp/tytb-profit-motive-data
 
 Temporary demo storage can reset when Render restarts or redeploys.
 
-Do not enter real client/taxpayer records until `APP_PASSWORD` is set.
+This no-password MVP is for demo and controlled testing. Do not enter sensitive client/taxpayer records until a real account/login system is added.
 
 ## Phone Install
 
 After Render gives you the HTTPS link:
 
 1. Open the link on your phone.
-2. Sign in with the username/password.
-3. On iPhone Safari, tap **Share** then **Add to Home Screen**.
-4. On Android Chrome, tap the browser menu then **Install app** or **Add to Home screen**.
+2. On iPhone Safari, tap **Share** then **Add to Home Screen**.
+3. On Android Chrome, tap the browser menu then **Install app** or **Add to Home screen**.
 
 ## Quicker Option For Demo Only
 
@@ -105,8 +102,7 @@ For an incubator demo, the quickest clean path is:
 
 1. GitHub repository with unzipped app files.
 2. Render Blueprint or Web Service.
-3. Set `APP_PASSWORD`.
-4. Open the Render URL on your phone.
+3. Open the Render URL on your phone.
 
 For a full production app with many client accounts, the next layer should be a real login system, client/advisor roles, secure file storage, and database backups.
 
