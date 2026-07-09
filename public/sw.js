@@ -1,5 +1,5 @@
-const CACHE_NAME = "tytb-profit-motive-v72";
-const ASSETS = ["/", "/index.html", "/styles.css?v=72", "/app.js?v=72", "/manifest.json", "/icon.svg", "/landing-hero.png"];
+const CACHE_NAME = "tytb-profit-motive-v73";
+const ASSETS = ["/", "/index.html", "/styles.css?v=73", "/app.js?v=73", "/manifest.json", "/icon.svg", "/landing-hero.png"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));

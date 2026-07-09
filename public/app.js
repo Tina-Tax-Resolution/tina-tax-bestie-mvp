@@ -666,18 +666,18 @@ function selectedYearTotalsStrip(businessId = wizardBusinessIdForTotals()) {
   const path = profitPath(recentFiveYearWindow(businessId));
   const highFlags = readinessFlags(t);
   const lossText = path.lossRows.length
-    ? `${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"} in the five-year lookback`
-    : "No completed loss years in this five-year lookback yet";
+    ? `${path.lossRows.length} prior-year loss year${path.lossRows.length === 1 ? "" : "s"} in the five-year lookback`
+    : "No prior-year loss years in this five-year lookback yet";
   const alertText = path.threeLossTrigger
-    ? `<div class="alert risk compact-alert"><strong>Bestie Alert:</strong> Losses appear in 3 of the last 5 completed tax years. The Business Check-In should be completed for educational record organization and discussion with a qualified tax professional.</div>`
+    ? `<div class="alert risk compact-alert"><strong>Bestie Alert:</strong> Losses appear in 3 of the last 5 prior tax years. The Business Check-In should be answered for educational record organization and discussion with a qualified tax professional.</div>`
     : highFlags.hasFlags && t.net < 0
       ? readinessAlertHtml(t)
       : "";
   return `<div class="year-total-strip">
     <div><span>Selected file</span><strong>TY ${escapeHtml(year)}</strong></div>
-    <div><span>Saved completed income</span><strong>${money.format(t.income)}</strong></div>
-    <div><span>Saved completed expenses</span><strong>${money.format(t.expenses)}</strong></div>
-    <div><span>Current saved result</span><strong class="${t.net < 0 ? "loss-text" : t.net > 0 ? "profit-text" : ""}">${resultLabel(t.net)}</strong></div>
+    <div><span>Saved income</span><strong>${money.format(t.income)}</strong></div>
+    <div><span>Saved expenses</span><strong>${money.format(t.expenses)}</strong></div>
+    <div><span>Current saved profit/loss</span><strong class="${t.net < 0 ? "loss-text" : t.net > 0 ? "profit-text" : ""}">${resultLabel(t.net)}</strong></div>
     <div><span>5-year watch</span><strong>${escapeHtml(lossText)}</strong></div>
   </div>${alertText}`;
 }
@@ -716,7 +716,7 @@ function wizardLivePreviewHtml() {
             ? "personal gift note"
             : "record";
   const countText = impact.counts
-    ? `This ${typeText} is not counted yet. It will be included after you finish the review step and click Complete & Save Record.`
+    ? `This ${typeText} is not counted yet. It will be included only if you click Save Record.`
     : recordWizard.type === "noncash_income" && recordWizard.giftStatus
       ? `This ${typeText} is not counted in profit/loss yet. It stays in the file for review.`
       : "Enter the amount or FMV to see the live profit/loss impact before saving.";
@@ -728,13 +728,13 @@ function wizardLivePreviewHtml() {
   const expenseNote = recordWizard.type === "cash_expense"
     ? expenseReviewNote(expenseReviewSignals(recordWizard.what.toLowerCase()), impact.amount, recordWizard.what).map(note => `<li>${escapeHtml(note)}</li>`).join("")
     : "";
-  return `${selectedYearTotalsStrip(wizardBusinessIdForTotals())}<div class="alert compact-alert"><strong>Not saved yet:</strong> The entry you are typing is only a preview until you reach Review and click Complete & Save Record.</div><div class="live-preview-grid">
-    <div><span>Completed records saved for TY ${escapeHtml($("taxYear").value)}</span><strong>${money.format(t.net)}</strong><small>Saved income ${money.format(t.income)} | Saved expenses ${money.format(t.expenses)}</small></div>
-    <div><span>This unsaved entry</span><strong>${impact.counts ? money.format(impact.amount) : "Review only"}</strong><small>${escapeHtml(typeText)}</small></div>
-    <div><span>Projected TY ${escapeHtml($("taxYear").value)} result</span><strong class="${afterNet < 0 ? "loss-text" : afterNet > 0 ? "profit-text" : ""}">${resultLabel(afterNet)}</strong><small>Income ${money.format(afterIncome)} | Expenses ${money.format(afterExpenses)}</small></div>
+  return `${selectedYearTotalsStrip(wizardBusinessIdForTotals())}<div class="alert compact-alert"><strong>Draft only:</strong> The entry you are typing is not saved or counted until you click Save Record.</div><div class="live-preview-grid">
+    <div><span>Saved records for TY ${escapeHtml($("taxYear").value)}</span><strong>${money.format(t.net)}</strong><small>Saved income ${money.format(t.income)} | Saved expenses ${money.format(t.expenses)}</small></div>
+    <div><span>This draft entry</span><strong>${impact.counts ? money.format(impact.amount) : "Review only"}</strong><small>${escapeHtml(typeText)}</small></div>
+    <div><span>If you save this additional entry</span><strong class="${afterNet < 0 ? "loss-text" : afterNet > 0 ? "profit-text" : ""}">${resultLabel(afterNet)}</strong><small>Income ${money.format(afterIncome)} | Expenses ${money.format(afterExpenses)}</small></div>
   </div>
   <div class="calculator-callout ${afterNet < 0 ? "loss" : afterNet > 0 ? "profit" : ""}">
-    <strong>Tax Bestie calculator:</strong> TY ${escapeHtml($("taxYear").value)} would show ${escapeHtml(resultLabel(afterNet))} after this record.
+    <strong>Tax Bestie calculator:</strong> Current saved TY ${escapeHtml($("taxYear").value)} result is ${escapeHtml(resultLabel(t.net))}. If you save this additional draft, it would change to ${escapeHtml(resultLabel(afterNet))}.
   </div>
   <p class="muted">${escapeHtml(countText)}</p>
   ${expenseNote ? `<div class="wizard-hint"><strong>Expense review:</strong><ul>${expenseNote}</ul></div>` : ""}
@@ -1835,7 +1835,7 @@ function renderDashboard() {
   const score = documentationCompletenessScore();
   $("score").textContent = `${score}%`;
   $("scoreBar").style.width = `${score}%`;
-  $("scoreText").textContent = score >= 75 ? "Most records have the core details and support fields completed." : score >= 50 ? "Some records need more notes, proof, FMV support, or payer/payee details." : "Many records need missing details before they are ready for review.";
+  $("scoreText").textContent = score >= 75 ? "Most records have the core details and support fields saved." : score >= 50 ? "Some records need more notes, proof, FMV support, or payer/payee details." : "Many records need missing details before they are ready for review.";
   renderProfitAlert(windowRows, path);
   updateProfitReviewAccess(path);
   renderChart(yearResults());
@@ -1871,16 +1871,16 @@ function profitAlertHtml(path) {
   ].filter(Boolean);
   const trendText = trendBits.length ? ` The current trend shows ${trendBits.join(" and ")}.` : "";
   if (path.threeLossTrigger) {
-    return `<div class="alert risk"><strong>Bestie Alert:</strong> Your saved records show losses in ${path.lossRows.length} of the last 5 completed tax years for ${escapeHtml(businessName(selectedBusinessId()))}. This does not decide whether your activity is a business or hobby. It means your records may need stronger support.${trendText}<ul class="profit-path-list">${yearSummary}</ul>If you are treating this as a business, answer the Business Check-In questions and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Start Business Check-In</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
+    return `<div class="alert risk"><strong>Bestie Alert:</strong> Your saved records show losses in ${path.lossRows.length} of the last 5 prior tax years for ${escapeHtml(businessName(selectedBusinessId()))}. This does not decide whether your activity is a business or hobby. It means your records may need stronger support.${trendText}<ul class="profit-path-list">${yearSummary}</ul>If you are treating this as a business, answer the Business Check-In questions and confer with a qualified tax professional when needed. <p class="muted">${hobbyTreatmentNote}</p><div class="actions" style="margin-top:10px"><button class="small primary" data-start-review="true">Start Business Check-In</button><span class="muted">Not legal, tax, accounting, or Circular 230 written tax advice.</span></div></div>`;
   }
   if (path.profitRows.length >= 3) {
     return `<div class="alert good"><strong>Business Progress:</strong> Your records show ${path.profitRows.length} profitable years in the selected five-year lookback.<ul class="profit-path-list">${yearSummary}</ul>Keep receipts, contracts, product/gift value proof, and notes current.</div>`;
   }
   if (path.lossRows.length === 2) {
-    return `<div class="alert warn"><strong>Bestie Heads-Up:</strong> Your completed-year records show 2 loss years in this five-year lookback. That can happen while growing, but keep receipts, proof, income efforts, and notes showing what you changed to improve profit.${trendText}<ul class="profit-path-list">${yearSummary}</ul>The Business Check-In appears if saved records show losses in 3 of 5 completed tax years. Educational record organization only; consult a qualified tax professional.</div>`;
+    return `<div class="alert warn"><strong>Bestie Heads-Up:</strong> Your prior-year records show 2 loss years in this five-year lookback. That can happen while growing, but keep receipts, proof, income efforts, and notes showing what you changed to improve profit.${trendText}<ul class="profit-path-list">${yearSummary}</ul>The Business Check-In appears if saved records show losses in 3 of 5 prior tax years. Educational record organization only; consult a qualified tax professional.</div>`;
   }
   const liveNote = path.currentLive && path.currentLive.net < 0 ? ` Current-year ${path.currentLive.year} is live YTD and is not treated as final until the year closes.` : "";
-  return `<div class="alert"><strong>Business Progress:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year lookback and ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the business make money."}${liveNote}<ul class="profit-path-list">${yearSummary}</ul></div>`;
+  return `<div class="alert"><strong>Business Progress:</strong> You have ${path.recorded.length} year${path.recorded.length === 1 ? "" : "s"} with records in this five-year lookback and ${path.lossRows.length} prior-year loss year${path.lossRows.length === 1 ? "" : "s"}.${trendText || " Keep documenting income growth, business changes, receipts, and why expenses help the business make money."}${liveNote}<ul class="profit-path-list">${yearSummary}</ul></div>`;
 }
 
 function renderChart(rows) {
@@ -1957,7 +1957,7 @@ function entryCompletion(entry) {
     };
   }
   return {
-    label: "Complete",
+    label: "Ready",
     className: "good",
     countsAsReady: true,
     detail: isIncome(entry)
@@ -2352,7 +2352,7 @@ function renderFactors() {
   const path = profitPath(recentFiveYearWindow());
   const isRepeatedLoss = path.lossRows.length >= 3;
   if ($("factorSummary")) {
-    $("factorSummary").innerHTML = `<div class="alert ${isRepeatedLoss ? "risk" : "warn"}"><strong>${isRepeatedLoss ? "Bestie Alert" : "Bestie Heads-Up"}:</strong> ${isRepeatedLoss ? "Your saved records show losses in 3 of the last 5 completed tax years." : "This year has records that may need stronger support."} Answer one question at a time. When you finish, Tax Bestie creates an educational discussion summary you can review with a qualified tax professional.</div>`;
+    $("factorSummary").innerHTML = `<div class="alert ${isRepeatedLoss ? "risk" : "warn"}"><strong>${isRepeatedLoss ? "Bestie Alert" : "Bestie Heads-Up"}:</strong> ${isRepeatedLoss ? "Your saved records show losses in 3 of the last 5 prior tax years." : "This year has records that may need stronger support."} Answer one question at a time. When you finish, Tax Bestie creates an educational discussion summary you can review with a qualified tax professional.</div>`;
   }
   const factor = factors[currentFactorIndex];
   const index = Number(factor.factor_no) - 1;
@@ -2435,8 +2435,8 @@ function renderFactorSummary(factors = factorsForBusiness()) {
     : "You added notes to several factors, which helps organize the story behind the records.";
   const path = profitPath(recentFiveYearWindow());
   const lossText = path.lossRows.length >= 3
-    ? `Your records show ${path.lossRows.length} completed loss years in the selected five-year window, so this summary is meant to help prepare a discussion about profit motive.`
-    : `Your records show ${path.lossRows.length} completed loss year${path.lossRows.length === 1 ? "" : "s"} in the selected five-year window. Keep updating this review as records change.`;
+    ? `Your records show ${path.lossRows.length} prior-year loss years in the selected five-year window, so this summary is meant to help prepare a discussion about profit motive.`
+    : `Your records show ${path.lossRows.length} prior-year loss year${path.lossRows.length === 1 ? "" : "s"} in the selected five-year window. Keep updating this review as records change.`;
   const discussionPoints = [
     path.lossRows.length >= 3 ? "Repeated losses and what business changes were made or planned." : "",
     path.incomeImproving ? "Income appears to be improving in the saved records." : "Whether income is increasing, flat, or declining.",
@@ -2738,7 +2738,7 @@ function showPostSavePanel() {
       ? "Do you have any business income, product/gift income, or another expense to add for this same tax year?"
       : "Do you have any income or expenses to add for this same tax year?";
   if ($("wizardPostSaveText")) $("wizardPostSaveText").textContent = `Saved ${typeText} for ${business} in TY ${year}. ${crossPrompt}`;
-  if ($("postSaveText")) $("postSaveText").textContent = `Add another item for ${business} in ${year}, or complete the tax-year review.`;
+  if ($("postSaveText")) $("postSaveText").textContent = `Add another item for ${business} in ${year}, or review progress for the tax year.`;
   panel.classList.remove("field-hidden");
 }
 
