@@ -137,6 +137,7 @@ let selectedTaxYearMemory = "";
 let selectedBusinessMemory = "";
 let recordWizard = {
   step: 0,
+  businessId: "",
   businessName: "",
   type: "",
   payment: "",
@@ -243,9 +244,11 @@ function resultLabel(net) {
 }
 
 function wizardReset(type = "") {
-  const selectedName = $("businessFilter")?.value ? businessName($("businessFilter").value) : "";
+  const selectedId = $("businessFilter")?.value || "";
+  const selectedName = selectedId ? businessName(selectedId) : "";
   recordWizard = {
     step: 0,
+    businessId: selectedId,
     businessName: selectedName,
     type,
     payment: "",
@@ -266,7 +269,9 @@ function wizardReset(type = "") {
 
 function startWizardType(type, options = {}) {
   const keepBusinessName = options.keepBusinessName ?? recordWizard.businessName;
+  const keepBusinessId = options.keepBusinessId ?? recordWizard.businessId ?? $("businessFilter")?.value ?? "";
   wizardReset(type);
+  if (keepBusinessId) recordWizard.businessId = String(keepBusinessId);
   if (keepBusinessName) recordWizard.businessName = keepBusinessName;
   recordWizard.step = type ? 1 : 0;
   renderRecordWizard();
@@ -642,9 +647,16 @@ function currentRecordFileReady() {
 function wizardBusinessIdForTotals() {
   const selected = selectedBusinessId();
   if (selected) return selected;
+  if (recordWizard.businessId) return Number(recordWizard.businessId);
   const typed = String(recordWizard.businessName || "").trim().toLowerCase();
   if (!typed) return 0;
-  return Number(state.businesses.find(business => business.name.toLowerCase() === typed)?.id || 0);
+  const exact = state.businesses.find(business => business.name.toLowerCase() === typed);
+  if (exact) {
+    recordWizard.businessId = String(exact.id);
+    if ($("businessFilter")) $("businessFilter").value = String(exact.id);
+    return Number(exact.id);
+  }
+  return 0;
 }
 
 function selectedYearTotalsStrip(businessId = wizardBusinessIdForTotals()) {
@@ -1024,6 +1036,8 @@ async function saveWizardRecord() {
   await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
   selectedTaxYearMemory = String(taxYear);
   selectedBusinessMemory = String(businessId);
+  recordWizard.businessId = String(businessId);
+  recordWizard.businessName = businessName(businessId);
   await refresh();
   $("taxYear").value = taxYear;
   $("recordTaxYear").value = taxYear;
@@ -1031,6 +1045,8 @@ async function saveWizardRecord() {
   $("simpleBusiness").value = String(businessId);
   selectedTaxYearMemory = String(taxYear);
   selectedBusinessMemory = String(businessId);
+  recordWizard.businessId = String(businessId);
+  recordWizard.businessName = businessName(businessId);
   updateBusinessSearchFromSelect();
   updateExportLink();
   renderDashboard();
@@ -2961,8 +2977,13 @@ $("recordWizardSave").addEventListener("click", async () => {
 document.querySelectorAll("[data-post-add-type]").forEach(button => {
   button.addEventListener("click", () => {
     $("wizardPostSavePanel")?.classList.add("field-hidden");
-    const selectedName = $("businessFilter")?.value ? businessName($("businessFilter").value) : recordWizard.businessName;
-    startWizardType(button.dataset.postAddType, { keepBusinessName: selectedName });
+    const selectedId = $("businessFilter")?.value || recordWizard.businessId || "";
+    const selectedName = selectedId ? businessName(selectedId) : recordWizard.businessName;
+    startWizardType(button.dataset.postAddType, { keepBusinessName: selectedName, keepBusinessId: selectedId });
+    if (selectedId) {
+      $("businessFilter").value = String(selectedId);
+      recordWizard.businessId = String(selectedId);
+    }
     recordWizard.businessName = selectedName;
     recordWizard.step = 1;
     renderRecordWizard();
