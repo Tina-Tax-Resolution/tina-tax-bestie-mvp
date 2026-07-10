@@ -2330,7 +2330,7 @@ function renderFactors() {
           const label = net < 0 ? "Loss" : net > 0 ? "Profit" : "Break even";
           return `<li><strong>TY ${escapeHtml(row.year)}:</strong> ${label} ${money.format(net)} <span class="muted">(income ${money.format(row.income || 0)}, expenses ${money.format(row.expenses || 0)})</span></li>`;
         }).join("");
-        $("factorSummary").innerHTML = `<div class="alert warn"><strong>Bestie Alert:</strong> Your saved records show 2 loss years in this five-year lookback. This is an early warning to keep better support, not a tax determination. The 9-question Business Check-In opens when saved records show losses in 3 of 5 prior tax years, or when the selected year has other support concerns.<ul class="profit-path-list">${yearSummary}</ul>Educational record organization only; consult a qualified tax professional.</div>`;
+        $("factorSummary").innerHTML = `<div class="alert warn"><strong>Bestie Alert:</strong> Early warning only: 2 loss years are showing in the five-year lookback. The 9-question Business Check-In opens at 3 loss years or another support concern. Keep receipts, proof of income efforts, and notes showing business changes.<ul class="profit-path-list">${yearSummary}</ul>Educational record organization only; consult a qualified tax professional.</div>`;
       } else {
         $("factorSummary").innerHTML = `<div class="alert"><strong>No Business Check-In needed yet.</strong> Keep saving money made, money spent, products/gifts, and proof. Tax Bestie will prompt you when the records show repeated losses or a year that needs stronger support. Educational record organization only.</div>`;
       }
@@ -2338,8 +2338,8 @@ function renderFactors() {
     $("factorList").innerHTML = "";
     return;
   }
-  intro?.classList.remove("field-hidden");
-  hobby?.classList.remove("field-hidden");
+  intro?.classList.add("field-hidden");
+  hobby?.classList.add("field-hidden");
   topButton?.classList.remove("field-hidden");
   bottomWrap?.classList.remove("field-hidden");
   progress?.classList.remove("field-hidden");
@@ -2362,7 +2362,19 @@ function renderFactors() {
   const path = profitPath(recentFiveYearWindow());
   const isRepeatedLoss = path.lossRows.length >= 3;
   if ($("factorSummary")) {
-    $("factorSummary").innerHTML = `<div class="alert ${isRepeatedLoss ? "risk" : "warn"}"><strong>${isRepeatedLoss ? "Bestie Alert" : "Bestie Heads-Up"}:</strong> ${isRepeatedLoss ? "Your saved records show losses in 3 of the last 5 prior tax years." : "This year has records that may need stronger support."} Answer one question at a time. When you finish, Tax Bestie creates an educational discussion summary you can review with a qualified tax professional.</div>`;
+    const yearTotals = totals();
+    const flags = readinessFlags(yearTotals);
+    const reasons = [];
+    if (isRepeatedLoss) reasons.push(`losses in ${path.lossRows.length} of the last 5 prior tax years`);
+    if (!isRepeatedLoss && flags.highExpenseRatio) reasons.push("money spent is high compared with money made for the selected year");
+    if (!isRepeatedLoss && flags.expensesNoIncome) reasons.push("expenses are saved but no income is saved for the selected year");
+    if (!isRepeatedLoss && flags.largeExpense) reasons.push(`a larger expense is saved (${money.format(flags.largeExpense.amount_usd)})`);
+    if (!isRepeatedLoss && flags.needsInfo) reasons.push("one or more records need more detail");
+    if (!isRepeatedLoss && flags.reviewItems) reasons.push("one or more records are marked for review");
+    if (!isRepeatedLoss && flags.giftUnsure) reasons.push("a product/gift/barter item is marked not sure");
+    const reasonText = reasons.length ? reasons.slice(0, 2).join(" and ") : "the selected year has records that may need stronger support";
+    const className = isRepeatedLoss ? "risk" : "warn";
+    $("factorSummary").innerHTML = `<div class="alert ${className}"><strong>Bestie Alert:</strong> Showing the Business Check-In because ${escapeHtml(reasonText)}. Answer one question at a time to organize an educational discussion summary for a qualified tax professional. This does not decide whether the activity is a business or hobby.</div>`;
   }
   const factor = factors[currentFactorIndex];
   const index = Number(factor.factor_no) - 1;
