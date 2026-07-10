@@ -267,13 +267,18 @@ function wizardReset(type = "") {
   renderRecordWizard();
 }
 
+function firstEntryStepForType(type) {
+  if (!type) return 0;
+  return businessIsSelectedOrTyped() ? Math.min(2, wizardSteps().length - 1) : 0;
+}
+
 function startWizardType(type, options = {}) {
   const keepBusinessName = options.keepBusinessName ?? recordWizard.businessName;
   const keepBusinessId = options.keepBusinessId ?? recordWizard.businessId ?? $("businessFilter")?.value ?? "";
   wizardReset(type);
   if (keepBusinessId) recordWizard.businessId = String(keepBusinessId);
   if (keepBusinessName) recordWizard.businessName = keepBusinessName;
-  recordWizard.step = type ? 1 : 0;
+  recordWizard.step = firstEntryStepForType(type);
   renderRecordWizard();
 }
 
@@ -3002,11 +3007,15 @@ document.body.addEventListener("input", (event) => {
 document.body.addEventListener("click", (event) => {
   const startType = event.target.closest("[data-wizard-start-type]");
   if (!startType) return;
-  const selectedName = recordWizard.businessName || ($("businessFilter")?.value ? businessName($("businessFilter").value) : "");
+  const selectedId = $("businessFilter")?.value || recordWizard.businessId || "";
+  const selectedName = selectedId ? businessName(selectedId) : recordWizard.businessName;
   showGuidedEntry();
-  startWizardType(startType.dataset.wizardStartType || "", { keepBusinessName: selectedName });
+  startWizardType(startType.dataset.wizardStartType || "", { keepBusinessName: selectedName, keepBusinessId: selectedId });
+  if (selectedId) {
+    $("businessFilter").value = String(selectedId);
+    recordWizard.businessId = String(selectedId);
+  }
   recordWizard.businessName = selectedName;
-  recordWizard.step = recordWizard.type ? 1 : 0;
   renderRecordWizard();
 });
 
@@ -3047,7 +3056,7 @@ document.querySelectorAll("[data-post-add-type]").forEach(button => {
       recordWizard.businessId = String(selectedId);
     }
     recordWizard.businessName = selectedName;
-    recordWizard.step = 1;
+    recordWizard.step = firstEntryStepForType(recordWizard.type);
     renderRecordWizard();
   });
 });
