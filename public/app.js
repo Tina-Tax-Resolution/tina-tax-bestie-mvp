@@ -264,18 +264,55 @@ function wizardReset(type = "") {
     proofType: "",
     proofData: ""
   };
+  recordWizard.step = type
+    ? firstEntryStepForType(type)
+    : businessIsSelectedOrTyped()
+      ? Math.min(1, wizardSteps().length - 1)
+      : 0;
+  setWizardWorkAreaVisible(true);
   renderRecordWizard();
 }
 
 function firstEntryStepForType(type) {
   if (!type) return 0;
-  return businessIsSelectedOrTyped() ? Math.min(2, wizardSteps().length - 1) : 0;
+  return businessIsSelectedOrTyped() ? Math.min(1, wizardSteps().length - 1) : 0;
+}
+
+function wizardHasDraftData() {
+  return Boolean(
+    recordWizard.payment ||
+    recordWizard.date ||
+    recordWizard.dateMonth ||
+    recordWizard.dateDay ||
+    recordWizard.amount ||
+    recordWizard.what ||
+    recordWizard.who ||
+    recordWizard.giftStatus ||
+    recordWizard.proofChoice ||
+    recordWizard.proofName
+  );
+}
+
+function setWizardWorkAreaVisible(visible = true) {
+  ["recordWizardCard", "wizardLivePreview"].forEach(id => $(id)?.classList.toggle("field-hidden", !visible));
+  document.querySelector(".wizard-actions")?.classList.toggle("field-hidden", !visible);
+  document.querySelector(".wizard-progress")?.classList.toggle("field-hidden", !visible);
+  document.querySelector(".record-type-tabs")?.classList.toggle("field-hidden", !visible);
 }
 
 function startWizardType(type, options = {}) {
   const keepBusinessName = options.keepBusinessName ?? recordWizard.businessName;
   const keepBusinessId = options.keepBusinessId ?? recordWizard.businessId ?? $("businessFilter")?.value ?? "";
+  const sameType = recordWizard.type === type;
+  if (sameType && wizardHasDraftData()) {
+    $("wizardPostSavePanel")?.classList.add("field-hidden");
+    setWizardWorkAreaVisible(true);
+    renderRecordWizard();
+    return;
+  }
   wizardReset(type);
+  $("wizardPostSavePanel")?.classList.add("field-hidden");
+  setWizardWorkAreaVisible(true);
   if (keepBusinessId) recordWizard.businessId = String(keepBusinessId);
   if (keepBusinessName) recordWizard.businessName = keepBusinessName;
   recordWizard.step = firstEntryStepForType(type);
@@ -284,6 +321,8 @@ function startWizardType(type, options = {}) {
 
 function showGuidedEntry(type = "") {
   goToView("capture", "Add Record", "Answer one question at a time to save income, expenses, products, gifts, or barter.");
+  $("wizardPostSavePanel")?.classList.add("field-hidden");
+  setWizardWorkAreaVisible(true);
   document.querySelector(".record-wizard-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   if (type) startWizardType(type);
   else renderRecordWizard();
@@ -554,7 +593,6 @@ function wizardSteps() {
   if (!recordWizard.type) return [{ key: "business" }, { key: "type" }];
   if (recordWizard.type === "cash_income") return [
     { key: "business" },
-    { key: "type" },
     { key: "payment" },
     { key: "date" },
     { key: "amount" },
@@ -565,7 +603,6 @@ function wizardSteps() {
   ];
   if (recordWizard.type === "cash_expense") return [
     { key: "business" },
-    { key: "type" },
     { key: "what" },
     { key: "date" },
     { key: "amount" },
@@ -576,7 +613,6 @@ function wizardSteps() {
   ];
   const steps = [
     { key: "business" },
-    { key: "type" },
     { key: "giftStatus" },
     { key: "what" }
   ];
@@ -897,7 +933,7 @@ function renderRecordWizard() {
   const step = currentWizardStep();
   const percent = Math.round((recordWizard.step / Math.max(steps.length - 1, 1)) * 100);
   if ($("recordWizardStep")) $("recordWizardStep").textContent = `Step ${recordWizard.step + 1} of ${steps.length}`;
-  if ($("recordWizardPercent")) $("recordWizardPercent").textContent = `${percent}% complete`;
+  if ($("recordWizardPercent")) $("recordWizardPercent").textContent = `${percent}% done`;
   if ($("recordWizardFill")) $("recordWizardFill").style.width = `${percent}%`;
   renderWizardProgressSteps(steps);
   document.querySelectorAll("[data-wizard-start-type]").forEach(button => {
@@ -1583,10 +1619,7 @@ function businessKeyForId(id) {
 function entryBelongsToBusiness(entry, businessId = selectedBusinessId()) {
   const selected = Number(businessId || 0);
   if (!selected) return false;
-  if (Number(entry.business_id || 0) === selected) return true;
-  const selectedKey = businessKeyForId(selected);
-  const entryKey = businessKeyForId(entry.business_id);
-  return Boolean(selectedKey && entryKey && selectedKey === entryKey);
+  return Number(entry.business_id || 0) === selected;
 }
 
 function entriesForYear(year = $("taxYear").value, businessId = selectedBusinessId()) {
@@ -2385,7 +2418,7 @@ function renderFactors() {
   const index = Number(factor.factor_no) - 1;
   const percent = Math.round(((currentFactorIndex + 1) / factors.length) * 100);
   if ($("checkinProgressText")) $("checkinProgressText").textContent = `Question ${currentFactorIndex + 1} of ${factors.length}`;
-  if ($("checkinProgressPercent")) $("checkinProgressPercent").textContent = `${percent}% complete`;
+  if ($("checkinProgressPercent")) $("checkinProgressPercent").textContent = `${percent}% done`;
   if ($("checkinProgressFill")) $("checkinProgressFill").style.width = `${percent}%`;
   if (backButton) backButton.disabled = currentFactorIndex === 0;
   if (nextButton) nextButton.textContent = currentFactorIndex === factors.length - 1 ? "Finish & Show Summary" : "Next";
@@ -2754,6 +2787,7 @@ function showPostSavePanel() {
   if (!panel) return;
   const year = $("taxYear").value || "this tax year";
   const business = $("businessFilter").value ? businessName($("businessFilter").value) : "this business";
+  const currentTotals = totals(year, selectedBusinessId());
   const typeText = recordWizard.type === "cash_income"
       ? "income"
       : recordWizard.type === "cash_expense"
@@ -2764,8 +2798,9 @@ function showPostSavePanel() {
     : recordWizard.type === "cash_expense"
       ? "Do you have any business income, product/gift income, or another expense to add for this same tax year?"
       : "Do you have any income or expenses to add for this same tax year?";
-  if ($("wizardPostSaveText")) $("wizardPostSaveText").textContent = `Saved ${typeText} for ${business} in TY ${year}. ${crossPrompt}`;
+  if ($("wizardPostSaveText")) $("wizardPostSaveText").textContent = `Saved ${typeText} for ${business} in TY ${year}. Current saved result: ${resultLabel(currentTotals.net)}. Saved income ${money.format(currentTotals.income)} | saved expenses ${money.format(currentTotals.expenses)}. ${crossPrompt}`;
   if ($("postSaveText")) $("postSaveText").textContent = `Add another item for ${business} in ${year}, or review progress for the tax year.`;
+  setWizardWorkAreaVisible(false);
   panel.classList.remove("field-hidden");
 }
 
@@ -3176,7 +3211,20 @@ $("businessFilter").addEventListener("change", () => {
   if ($("businessFilter").value === "__new__") {
     selectedBusinessMemory = "";
     $("businessFilter").value = "";
+    $("recordBusiness").value = "";
+    $("simpleBusiness").value = "";
+    recordWizard.businessId = "";
+    recordWizard.businessName = "";
+    $("simpleBusinessSearch").value = "";
     resetBusinessForm();
+    updateBusinessSearchFromSelect();
+    updateExportLink();
+    updateTaxYearRangeHelp();
+    renderDashboard();
+    renderRecords();
+    renderAudit();
+    renderFactors();
+    if (document.body.dataset.view === "capture") renderRecordWizard();
     toast("Enter the business/activity name and type.");
     return;
   }
@@ -3190,6 +3238,8 @@ $("businessFilter").addEventListener("change", () => {
   selectedBusinessMemory = $("businessFilter").value;
   $("recordBusiness").value = $("businessFilter").value;
   $("simpleBusiness").value = $("businessFilter").value;
+  recordWizard.businessId = $("businessFilter").value;
+  recordWizard.businessName = $("businessFilter").value ? businessName($("businessFilter").value) : "";
   updateBusinessSearchFromSelect();
   updateExportLink();
   updateTaxYearRangeHelp();
@@ -3197,6 +3247,7 @@ $("businessFilter").addEventListener("change", () => {
   renderRecords();
   renderAudit();
   renderFactors();
+  if (document.body.dataset.view === "capture") renderRecordWizard();
 });
 
 $("showDeleted").addEventListener("change", renderRecords);
@@ -3352,6 +3403,11 @@ document.body.addEventListener("click", async (event) => {
     renderWizardLivePreview();
     const error = validateWizardStep();
     if (error) {
+      renderRecordWizard();
+      return;
+    }
+    if (field === "type") {
+      recordWizard.step = firstEntryStepForType(recordWizard.type);
       renderRecordWizard();
       return;
     }
