@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meet Tina | Tina Your Tax Bestie</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #617087;
+      --line: #d9e2e8;
+      --page: #f6f8f6;
+      --panel: #ffffff;
+      --navy: #183746;
+      --accent: #227c73;
+      --gold: #c48a1d;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      line-height: 1.6;
+    }
+    a { color: inherit; }
+    .page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 18px clamp(18px, 5vw, 70px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 900;
+    }
+    .logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      color: var(--navy);
+      background: linear-gradient(135deg, #fff 0 44%, #e8bb4b 44% 100%);
+      font-weight: 950;
+    }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: rgba(255,255,255,.82);
+      font-weight: 800;
+      font-size: 14px;
+    }
+    nav a {
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 999px;
+      padding: 8px 12px;
+    }
+    .hero {
+      color: #fff;
+      background:
+        linear-gradient(90deg, rgba(24,55,70,.96), rgba(24,55,70,.72)),
+        url("/landing-hero.png") center / cover no-repeat;
+      padding: clamp(46px, 8vw, 92px) clamp(18px, 5vw, 70px);
+    }
+    .hero-inner {
+      max-width: 920px;
+    }
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      font-weight: 950;
+      color: rgba(255,255,255,.72);
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0 0 18px;
+      font-size: clamp(46px, 7vw, 82px);
+      line-height: .96;
+      letter-spacing: 0;
+    }
+    .hero p {
+      max-width: 760px;
+      font-size: 20px;
+      color: rgba(255,255,255,.86);
+      margin: 0;
+    }
+    main {
+      width: min(1120px, calc(100% - 36px));
+      margin: -42px auto 56px;
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 18px;
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: clamp(22px, 4vw, 40px);
+      box-shadow: 0 16px 34px rgba(23, 32, 51, .09);
+    }
+    .story {
+      font-size: 18px;
+    }
+    .story p {
+      margin: 0 0 18px;
+    }
+    .pull {
+      border-left: 5px solid var(--accent);
+      background: #f1fbf8;
+      padding: 18px;
+      border-radius: 8px;
+      margin: 26px 0;
+      font-size: 22px;
+      font-weight: 950;
+      line-height: 1.25;
+    }
+    .side-card {
+      display: grid;
+      gap: 14px;
+    }
+    .side-card h2,
+    .side-card h3 {
+      margin: 0;
+      line-height: 1.2;
+    }
+    .credential {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fafcfa;
+    }
+    .credential span {
+      display: block;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-weight: 950;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .credential strong {
+      display: block;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+    .note {
+      background: #fff8e6;
+      border: 1px solid #ead199;
+      border-radius: 8px;
+      padding: 16px;
+      color: #4a3b1f;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .note strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--ink);
+    }
+    footer {
+      background: #102b38;
+      color: rgba(255,255,255,.76);
+      padding: 22px clamp(18px, 5vw, 70px);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    footer strong {
+      color: #fff;
+    }
+    @media (max-width: 880px) {
+      header {
+        display: grid;
+      }
+      main {
+        grid-template-columns: 1fr;
+        margin-top: -24px;
+      }
+      .story {
+        font-size: 17px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">TY</div>
+        <div>Tina Your Tax Bestie LLC</div>
+      </div>
+      <nav aria-label="Page links">
+        <a href="/">Tax Bestie App</a>
+        <a href="/developer-simple-flow.html">Developer Flow</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="eyebrow">Meet Tina</div>
+        <h1>Clear tax help from someone who understands the process.</h1>
+        <p>I am Rosetta Jones, and many people know me as Tina. I bring more than 26 years of tax experience, including 26 years with the Internal Revenue Service.</p>
+      </div>
+    </section>
+
+    <main>
+      <article class="card story">
+        <p>I worked in several IRS roles that gave me a deep understanding of taxpayer service, IRS procedures, and the importance of getting the details right.</p>
+
+        <p>I began in Taxpayer Services as a Customer Service Representative, assisting taxpayers over the phone and helping them understand tax questions, IRS notices, and account issues.</p>
+
+        <p>Later, I served as a Tax Analyst in the Centralized Quality Review System, known as CQRS. In that role, I reviewed the work of quality reviewers who listened to IRS toll-free calls. Those reviewers evaluated whether customer service representatives provided quality service, followed the Internal Revenue Manual, and handled taxpayer calls correctly.</p>
+
+        <p>My responsibility was to review those call assessments and make sure they were accurate, complete, and fair from both the taxpayer’s perspective and the employee’s guidance requirements.</p>
+
+        <div class="pull">In plain language, I checked the checkers.</div>
+
+        <p>That experience shaped how I serve today: with careful review, clear communication, and respect for the real people behind every tax issue.</p>
+
+        <p>Through Tina’s Tax Resolution LLC, I help individuals, content creators, and small business owners feel more informed, prepared, and supported when tax problems become stressful.</p>
+
+        <p>I also own Tina Your Tax Bestie LLC, which supports my YouTube channel and content brand, Tina Your Tax Bestie. Through that platform, I share general tax education in a way that is easier to understand and less intimidating.</p>
+
+        <p>My goal is simple: to help people feel less overwhelmed, more prepared, and more confident when dealing with taxes.</p>
+      </article>
+
+      <aside class="card side-card">
+        <h2>Rosetta Jones</h2>
+        <p class="muted">Known to many as Tina.</p>
+
+        <div class="credential">
+          <span>Experience</span>
+          <strong>26+ years of tax experience</strong>
+        </div>
+        <div class="credential">
+          <span>IRS Background</span>
+          <strong>Retired after 26 years with the Internal Revenue Service</strong>
+        </div>
+        <div class="credential">
+          <span>IRS Roles</span>
+          <strong>Taxpayer Services and CQRS Tax Analyst</strong>
+        </div>
+        <div class="credential">
+          <span>Business</span>
+          <strong>Tina’s Tax Resolution LLC</strong>
+        </div>
+        <div class="credential">
+          <span>Content Brand</span>
+          <strong>Tina Your Tax Bestie LLC and YouTube channel</strong>
+        </div>
+
+        <div class="note">
+          <strong>Small note</strong>
+          Tina Your Tax Bestie content is for general education only. Individual tax advice, tax preparation, or representation is provided only through a formal engagement with Tina’s Tax Resolution LLC. I am retired from the IRS and do not have special access, influence, preferential treatment, or guaranteed outcomes with the agency.
+        </div>
+      </aside>
+    </main>
+
+    <footer>
+      <strong>Educational note:</strong> General information on this page is not legal, tax, accounting, or Circular 230 written tax advice and does not create a client relationship with Tina Your Tax Bestie LLC or Tina's Tax Resolution LLC. Consult a qualified tax professional about your specific facts and circumstances.
+    </footer>
+  </div>
+</body>
+</html>

@@ -32,6 +32,15 @@
    - Allow optional prior-year backfill using Schedule C totals: income, expenses, net profit/loss, and optional SE tax note.
    - Allow optional support uploads such as bank statements, platform reports, receipts, or bookkeeping exports.
 
+7. Record Details wording.
+   - Replace "Record Strength" because it can mislead users into thinking the app judged proof quality.
+   - Show basic detail completeness separately from receipt/proof attachment status.
+   - If no receipts or proof files were attached, say that clearly even when records have dates, amounts, notes, or completed 9-question answers.
+
+8. No client relationship disclaimer.
+   - Add clear wording that using Tax Bestie does not create a client relationship with Tina Your Tax Bestie LLC or Tina's Tax Resolution LLC.
+   - Keep this tied to the educational/Circular 230 disclaimer so users understand the app is a record-organization tool, not representation or individualized tax advice.
+
 ## Back Burner / Later
 
 1. Batch import from other platforms.

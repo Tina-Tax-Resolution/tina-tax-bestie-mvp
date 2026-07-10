@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=79">
+  <link rel="stylesheet" href="styles.css?v=83">
 </head>
 <body class="landing-active" data-view="dashboard">
   <section class="landing" id="landingPage" aria-label="Tax Bestie landing page">
@@ -32,7 +32,7 @@
         <span>Watch profit and loss by year</span>
         <span>Bestie Alerts when records need attention</span>
       </div>
-      <p class="landing-disclaimer">Tax Bestie helps organize records. It does not give legal, tax, accounting, or Circular 230 written tax advice. Review with a qualified tax professional before filing or taking any tax position.</p>
+      <p class="landing-disclaimer">Tax Bestie helps organize records. It does not give legal, tax, accounting, or Circular 230 written tax advice and does not create a client relationship with Tina Your Tax Bestie LLC or Tina's Tax Resolution LLC. Review with a qualified tax professional before filing or taking any tax position.</p>
     </div>
   </section>
   <div class="app">
@@ -103,11 +103,12 @@
           </article>
           <article class="panel span-4">
             <div class="section-title">
-              <h3>Record Strength <button class="info" data-tip="Shows whether records have dates, amounts, receipts, notes, and support. It does not decide tax treatment.">i</button></h3>
+              <h3>Record Details <button class="info" data-tip="Shows whether saved records have basic details such as tax year, date, amount, and description. This is not receipt strength, proof strength, or a tax decision.">i</button></h3>
             </div>
             <div class="gauge"><div id="scoreBar"></div></div>
             <div class="score" id="score">0%</div>
-            <p class="muted" id="scoreText">Add records and supporting details.</p>
+            <p class="muted" id="scoreText">Add records to see basic detail status.</p>
+            <p class="muted proof-status" id="proofStatusText">Proof status appears after records are saved.</p>
           </article>
         </div>
       </section>
@@ -181,6 +182,7 @@
                 <button class="primary" type="button" data-post-add-type="cash_income">Add Income</button>
                 <button class="primary" type="button" data-post-add-type="cash_expense">Add Expense</button>
                 <button class="ghost" type="button" data-post-add-type="noncash_income">Add Product / Gift</button>
+                <button class="ghost" type="button" id="wizardSaveLater">Save & Continue Later</button>
                 <button class="ghost" type="button" data-new-record-different-year>New Record / Different Year</button>
                 <button class="ghost" type="button" id="wizardCompleteYearReview">Review This Year</button>
               </div>
@@ -423,6 +425,6 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=79"></script>
+  <script src="app.js?v=83"></script>
 </body>
 </html>

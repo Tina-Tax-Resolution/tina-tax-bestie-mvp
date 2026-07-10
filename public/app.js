@@ -1359,7 +1359,7 @@ function defaultLocalState() {
       advisor_contact: "",
       accent_color: "#227c73",
       current_tax_year: new Date().getFullYear(),
-      disclaimer: "Educational and record-organization purposes only. Not legal, tax, accounting, or Circular 230 written tax advice. Consult a qualified tax professional before filing or taking any tax position."
+      disclaimer: "Educational and record-organization purposes only. Not legal, tax, accounting, or Circular 230 written tax advice. Use of this app does not create a client relationship with Tina Your Tax Bestie LLC or Tina's Tax Resolution LLC. Consult a qualified tax professional before filing or taking any tax position."
     },
     businesses: [],
     entries: [],
@@ -1799,6 +1799,27 @@ function documentationCompletenessScore() {
   return Math.round((total / rows.length) * 100);
 }
 
+function proofStatusForYear() {
+  const rows = entriesForYear();
+  const total = rows.length;
+  const files = rows.filter(entry => entry.evidence_file_data || entry.evidence_file_name).length;
+  const notes = rows.filter(entry => String(entry.evidence_note || entry.fmv_method || entry.shared_use_note || "").trim()).length;
+  const productOrGiftRows = rows.filter(entry => {
+    const combined = `${entry.record_type || ""} ${entry.category || ""} ${entry.description || ""}`;
+    return /gift|barter|product|fmv|crypto|noncash/i.test(combined);
+  });
+  const fmvWithoutSupport = productOrGiftRows.filter(entry => {
+    return !entry.evidence_file_data && !entry.evidence_file_name && !String(entry.fmv_method || entry.evidence_note || "").trim();
+  }).length;
+  return {
+    total,
+    files,
+    notes,
+    missingFiles: Math.max(total - files, 0),
+    fmvWithoutSupport
+  };
+}
+
 function renderTaxYears() {
   const current = Number(state.settings.current_tax_year || new Date().getFullYear());
   const previous = selectedTaxYearMemory || $("taxYear")?.value || "";
@@ -1839,6 +1860,7 @@ function renderDashboard() {
     $("score").textContent = "0%";
     $("scoreBar").style.width = "0%";
     $("scoreText").textContent = "Start by adding your business/activity and first record.";
+    if ($("proofStatusText")) $("proofStatusText").textContent = "No proof status yet.";
     $("profitAlert").innerHTML = `<div class="alert"><strong>Start clean:</strong> No data is loaded. Add your business/activity, choose the tax year, then save income, expenses, or product/gift records as they happen.</div>`;
     $("yearChart").innerHTML = `<p class="muted">No records yet.</p>`;
     renderProfitLossTable([]);
@@ -1854,7 +1876,8 @@ function renderDashboard() {
     $("profitYears").textContent = "Choose year";
     $("score").textContent = "0%";
     $("scoreBar").style.width = "0%";
-    $("scoreText").textContent = "Choose a tax year before reviewing documentation completeness.";
+    $("scoreText").textContent = "Choose a tax year before reviewing record detail status.";
+    if ($("proofStatusText")) $("proofStatusText").textContent = "Proof status appears after a tax year is selected.";
     $("profitAlert").innerHTML = `<div class="alert"><strong>Choose tax year:</strong> Select the tax year you want to work on. The app will keep each tax year separate and only run the five-year profit review after a year is selected.</div>`;
     updateProfitReviewAccess(emptyPath);
     renderChart(yearResults());
@@ -1871,9 +1894,26 @@ function renderDashboard() {
   $("netTotal").textContent = money.format(t.net);
   $("profitYears").textContent = `${path.lossRows.length} losses`;
   const score = documentationCompletenessScore();
+  const proof = proofStatusForYear();
   $("score").textContent = `${score}%`;
   $("scoreBar").style.width = `${score}%`;
-  $("scoreText").textContent = score >= 75 ? "Most records have the core details and support fields saved." : score >= 50 ? "Some records need more notes, proof, FMV support, or payer/payee details." : "Many records need missing details before they are ready for review.";
+  $("scoreText").textContent = score >= 75
+    ? `Basic details are filled in for most saved records in ${selectedTaxYearStatus()}.`
+    : score >= 50
+      ? `Some saved records in ${selectedTaxYearStatus()} still need basic details like description, payer/payee, or organizer mapping.`
+      : `Many saved records in ${selectedTaxYearStatus()} still need basic details before tax-time review.`;
+  if ($("proofStatusText")) {
+    if (!proof.total) {
+      $("proofStatusText").textContent = "No saved records yet.";
+    } else if (!proof.files) {
+      const noteText = proof.notes ? ` ${proof.notes} record${proof.notes === 1 ? " has" : "s have"} notes or FMV text, but no file is attached.` : "";
+      const fmvText = proof.fmvWithoutSupport ? ` ${proof.fmvWithoutSupport} product/gift/FMV record${proof.fmvWithoutSupport === 1 ? " needs" : "s need"} stronger FMV support.` : "";
+      $("proofStatusText").textContent = `Proof status: no receipt/proof files attached yet.${noteText}${fmvText} This percentage is not proof strength.`;
+    } else {
+      const fmvText = proof.fmvWithoutSupport ? ` ${proof.fmvWithoutSupport} product/gift/FMV record${proof.fmvWithoutSupport === 1 ? " still needs" : "s still need"} stronger FMV support.` : "";
+      $("proofStatusText").textContent = `Proof status: ${proof.files} of ${proof.total} saved record${proof.total === 1 ? "" : "s"} have receipt/proof files attached; ${proof.missingFiles} do not.${fmvText}`;
+    }
+  }
   renderProfitAlert(windowRows, path);
   updateProfitReviewAccess(path);
   renderChart(yearResults());
@@ -2800,7 +2840,6 @@ function showPostSavePanel() {
       : "Do you have any income or expenses to add for this same tax year?";
   if ($("wizardPostSaveText")) $("wizardPostSaveText").textContent = `Saved ${typeText} for ${business} in TY ${year}. Current saved result: ${resultLabel(currentTotals.net)}. Saved income ${money.format(currentTotals.income)} | saved expenses ${money.format(currentTotals.expenses)}. ${crossPrompt}`;
   if ($("postSaveText")) $("postSaveText").textContent = `Add another item for ${business} in ${year}, or review progress for the tax year.`;
-  setWizardWorkAreaVisible(false);
   panel.classList.remove("field-hidden");
 }
 
@@ -2900,6 +2939,25 @@ function resetBusinessForm() {
   $("businessActive").checked = true;
   goToView("businesses", "Business Setup", "Add or edit the business/activity before recording income and expenses.");
   setTimeout(() => $("businessName").focus(), 30);
+}
+
+function startNewBusinessInWizard() {
+  selectedBusinessMemory = "";
+  if ($("businessFilter")) $("businessFilter").value = "";
+  if ($("recordBusiness")) $("recordBusiness").value = "";
+  if ($("simpleBusiness")) $("simpleBusiness").value = "";
+  if ($("simpleBusinessSearch")) $("simpleBusinessSearch").value = "";
+  recordWizard.businessId = "";
+  recordWizard.businessName = "";
+  recordWizard.step = 0;
+  $("wizardPostSavePanel")?.classList.add("field-hidden");
+  showGuidedEntry();
+  renderDashboard();
+  renderRecords();
+  renderAudit();
+  renderFactors();
+  renderRecordWizard();
+  setTimeout(() => $("wizardInput")?.focus(), 60);
 }
 
 async function refresh(options = {}) {
@@ -3112,6 +3170,13 @@ $("wizardCompleteYearReview").addEventListener("click", () => {
   renderAudit();
 });
 
+$("wizardSaveLater")?.addEventListener("click", () => {
+  $("wizardPostSavePanel")?.classList.add("field-hidden");
+  goToView("dashboard", "Home", "Pick your business and year. Then add what came in, what went out, or what you received.");
+  renderDashboard();
+  toast("Saved. Come back when you have another record to add.");
+});
+
 $("scheduleLine").addEventListener("change", () => {
   $("scheduleLine").dataset.manual = "true";
   $("scheduleHint").textContent = `Selected: ${lineLabel($("scheduleLine").value)}.`;
@@ -3209,30 +3274,18 @@ $("businessFilter").addEventListener("change", () => {
   profitReviewSubmitted = false;
   currentFactorIndex = 0;
   if ($("businessFilter").value === "__new__") {
-    selectedBusinessMemory = "";
-    $("businessFilter").value = "";
-    $("recordBusiness").value = "";
-    $("simpleBusiness").value = "";
-    recordWizard.businessId = "";
-    recordWizard.businessName = "";
-    $("simpleBusinessSearch").value = "";
-    resetBusinessForm();
-    updateBusinessSearchFromSelect();
-    updateExportLink();
-    updateTaxYearRangeHelp();
-    renderDashboard();
-    renderRecords();
-    renderAudit();
-    renderFactors();
-    if (document.body.dataset.view === "capture") renderRecordWizard();
-    toast("Enter the business/activity name and type.");
+    startNewBusinessInWizard();
+    toast("Type the business/activity, then continue.");
     return;
   }
   const selectedBusiness = state.businesses.find(business => String(business.id) === $("businessFilter").value);
   if (isPlaceholderBusiness(selectedBusiness)) {
     selectedBusinessMemory = $("businessFilter").value;
-    editBusinessRecord(selectedBusiness.id);
-    toast("Replace New Business Activity with the real business/activity name and type.");
+    recordWizard.businessId = "";
+    recordWizard.businessName = "";
+    $("businessFilter").value = "";
+    startNewBusinessInWizard();
+    toast("Type the real business/activity name, then continue.");
     return;
   }
   selectedBusinessMemory = $("businessFilter").value;
@@ -3505,7 +3558,18 @@ $("businessForm").addEventListener("submit", async (event) => {
     : await api("/api/businesses", { method: "POST", body: JSON.stringify(payload) });
   selectedBusinessMemory = String(saved.id || id || "");
   await refresh();
-  toast(id ? "Business updated." : "Business added.");
+  const savedId = String(saved.id || id || "");
+  if (savedId) {
+    $("businessFilter").value = savedId;
+    $("recordBusiness").value = savedId;
+    $("simpleBusiness").value = savedId;
+    recordWizard.businessId = savedId;
+    recordWizard.businessName = businessName(savedId);
+    recordWizard.step = recordWizard.type ? firstEntryStepForType(recordWizard.type) : Math.min(1, wizardSteps().length - 1);
+  }
+  showGuidedEntry();
+  renderRecordWizard();
+  toast(id ? "Business updated. Continue adding the record." : "Business added. Continue adding the record.");
 });
 
 $("newBusiness").addEventListener("click", resetBusinessForm);
