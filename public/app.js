@@ -2323,7 +2323,17 @@ function renderFactors() {
     bottomWrap?.classList.add("field-hidden");
     progress?.classList.add("field-hidden");
     if ($("factorSummary")) {
-      $("factorSummary").innerHTML = `<div class="alert"><strong>No Business Check-In needed yet.</strong> Keep saving money made, money spent, products/gifts, and proof. Tax Bestie will prompt you when the records show repeated losses or a year that needs stronger support. Educational record organization only.</div>`;
+      const path = profitPath(recentFiveYearWindow());
+      if (path.lossRows.length === 2) {
+        const yearSummary = path.recorded.map(row => {
+          const net = Number(row.net || 0);
+          const label = net < 0 ? "Loss" : net > 0 ? "Profit" : "Break even";
+          return `<li><strong>TY ${escapeHtml(row.year)}:</strong> ${label} ${money.format(net)} <span class="muted">(income ${money.format(row.income || 0)}, expenses ${money.format(row.expenses || 0)})</span></li>`;
+        }).join("");
+        $("factorSummary").innerHTML = `<div class="alert warn"><strong>Bestie Alert:</strong> Your saved records show 2 loss years in this five-year lookback. This is an early warning to keep better support, not a tax determination. The 9-question Business Check-In opens when saved records show losses in 3 of 5 prior tax years, or when the selected year has other support concerns.<ul class="profit-path-list">${yearSummary}</ul>Educational record organization only; consult a qualified tax professional.</div>`;
+      } else {
+        $("factorSummary").innerHTML = `<div class="alert"><strong>No Business Check-In needed yet.</strong> Keep saving money made, money spent, products/gifts, and proof. Tax Bestie will prompt you when the records show repeated losses or a year that needs stronger support. Educational record organization only.</div>`;
+      }
     }
     $("factorList").innerHTML = "";
     return;
