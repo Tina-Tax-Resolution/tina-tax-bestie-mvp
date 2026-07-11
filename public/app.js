@@ -135,6 +135,7 @@ let profitReviewSubmitted = false;
 let currentFactorIndex = 0;
 let selectedTaxYearMemory = "";
 let selectedBusinessMemory = "";
+const workspaceMemoryKey = "taxBestieWorkspaceV1";
 let recordWizard = {
   step: 0,
   businessId: "",
@@ -739,8 +740,10 @@ function wizardLivePreviewHtml() {
   const quarter = quarterFromDate(parsedDate);
   const quarterRows = parsedDate ? entriesForYear($("taxYear").value, wizardBusinessIdForTotals()).filter(entry => quarterFromDate(entry.event_date) === quarter) : [];
   const savedQuarter = quarterRows.reduce((sum, entry) => {
-    if (isIncome(entry)) sum.income += Number(entry.amount_usd || 0);
-    else sum.expenses += Number(entry.amount_usd || 0);
+    if (!countsInProfitLoss(entry)) return sum;
+    const amount = entryCountedAmount(entry);
+    if (isIncome(entry)) sum.income += amount;
+    else sum.expenses += amount;
     return sum;
   }, { income: 0, expenses: 0 });
   const afterQuarterIncome = savedQuarter.income + impact.income;
@@ -926,7 +929,16 @@ function wizardReviewHtml() {
   </div>`;
 }
 
+function syncWizardFromWorkspace() {
+  const businessId = $("businessFilter")?.value || recordWizard.businessId || "";
+  if (businessId && businessId !== "__new__") {
+    recordWizard.businessId = String(businessId);
+    recordWizard.businessName = businessName(businessId);
+  }
+}
+
 function renderRecordWizard() {
+  syncWizardFromWorkspace();
   const card = $("recordWizardCard");
   if (!card) return;
   const steps = wizardSteps();
@@ -1082,22 +1094,15 @@ async function saveWizardRecord() {
   selectedBusinessMemory = String(businessId);
   recordWizard.businessId = String(businessId);
   recordWizard.businessName = businessName(businessId);
+  rememberWorkspaceSelection();
   await refresh();
-  $("taxYear").value = taxYear;
-  $("recordTaxYear").value = taxYear;
-  $("businessFilter").value = String(businessId);
-  $("simpleBusiness").value = String(businessId);
-  selectedTaxYearMemory = String(taxYear);
-  selectedBusinessMemory = String(businessId);
-  recordWizard.businessId = String(businessId);
-  recordWizard.businessName = businessName(businessId);
+  applyWorkspaceSelection();
   updateBusinessSearchFromSelect();
-  updateExportLink();
   renderDashboard();
   renderRecords();
   renderFactors();
   showPostSavePanel();
-  clearSavedWizardEntry();
+  clearSavedWizardEntry({ keepType: recordWizard.type });
   toast(isGiftReviewOnly ? "Saved as Review Needed. It is not counted in income or profit/loss yet." : "Saved.");
 }
 
@@ -1129,9 +1134,58 @@ function dateMatchesTaxYear(dateValue, taxYear) {
   return { ok: true, message: "" };
 }
 
+function loadWorkspaceSelection() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(workspaceMemoryKey) || "null");
+    if (saved?.year) selectedTaxYearMemory = String(saved.year);
+    if (saved?.business) selectedBusinessMemory = String(saved.business);
+  } catch {
+    // Ignore storage read errors in restricted browser modes.
+  }
+}
+
+function rememberWorkspaceSelection() {
+  const year = $("taxYear")?.value || selectedTaxYearMemory || "";
+  const business = $("businessFilter")?.value || selectedBusinessMemory || "";
+  if (year) selectedTaxYearMemory = String(year);
+  if (business && business !== "__new__") selectedBusinessMemory = String(business);
+  try {
+    sessionStorage.setItem(workspaceMemoryKey, JSON.stringify({
+      year: selectedTaxYearMemory,
+      business: selectedBusinessMemory
+    }));
+  } catch {
+    // Ignore storage write errors in restricted browser modes.
+  }
+}
+
+function applyWorkspaceSelection() {
+  if ($("taxYear") && selectedTaxYearMemory && [...$("taxYear").options].some(option => option.value === String(selectedTaxYearMemory))) {
+    $("taxYear").value = String(selectedTaxYearMemory);
+  }
+  if ($("businessFilter") && selectedBusinessMemory && state.businesses.some(business => String(business.id) === String(selectedBusinessMemory))) {
+    $("businessFilter").value = String(selectedBusinessMemory);
+  }
+  if ($("recordTaxYear")) $("recordTaxYear").value = $("taxYear")?.value || "";
+  if ($("recordBusiness")) $("recordBusiness").value = $("businessFilter")?.value || "";
+  if ($("simpleBusiness")) $("simpleBusiness").value = $("businessFilter")?.value || "";
+  updateBusinessSearchFromSelect();
+  setDateBoundsForTaxYear();
+  updateTaxYearRangeHelp();
+  updateExportLink();
+}
+
+function syncWorkspaceFromEntry(entry) {
+  if (!entry) return;
+  selectedTaxYearMemory = String(entry.tax_year || "");
+  selectedBusinessMemory = String(entry.business_id || "");
+  rememberWorkspaceSelection();
+  applyWorkspaceSelection();
+}
+
 function setDateBoundsForTaxYear() {
-  const year = $("taxYear")?.value || "";
-  ["recordDate"].forEach(id => {
+  const year = $("taxYear")?.value || $("recordTaxYear")?.value || "";
+  ["recordDate", "simpleDate"].forEach(id => {
     const field = $(id);
     if (!field) return;
     if (year) {
@@ -1664,18 +1718,30 @@ function isIncome(entry) {
   return entry.record_type.includes("income");
 }
 
+function entryCountedAmount(entry) {
+  return Number(entry.amount_usd || 0) * Number(entry.allocation_percent ?? 100) / 100;
+}
+
+function countsInProfitLoss(entry) {
+  if (!entry || entry.deleted_at) return false;
+  if (entry.record_type === "review_note") return false;
+  if (String(entry.schedule_line || "") === "review_needed" && Number(entry.amount_usd || 0) <= 0) return false;
+  return true;
+}
+
 function totals(year = $("taxYear").value, businessId = selectedBusinessId()) {
   const rows = entriesForYear(year, businessId);
-  const income = rows.filter(isIncome).reduce((sum, e) => sum + Number(e.amount_usd || 0), 0);
-  const expenses = rows.filter(e => !isIncome(e)).reduce((sum, e) => sum + Number(e.amount_usd || 0), 0);
+  const countable = rows.filter(countsInProfitLoss);
+  const income = countable.filter(isIncome).reduce((sum, entry) => sum + entryCountedAmount(entry), 0);
+  const expenses = countable.filter(entry => !isIncome(entry)).reduce((sum, entry) => sum + entryCountedAmount(entry), 0);
   return { rows, income, expenses, net: income - expenses };
 }
 
 function yearResults(businessId = selectedBusinessId()) {
   const grouped = {};
-  state.entries.filter(entry => entryBelongsToBusiness(entry, businessId) && !entry.deleted_at).forEach(entry => {
+  state.entries.filter(entry => entryBelongsToBusiness(entry, businessId) && !entry.deleted_at && countsInProfitLoss(entry)).forEach(entry => {
     grouped[entry.tax_year] ||= { income: 0, expenses: 0 };
-    grouped[entry.tax_year][isIncome(entry) ? "income" : "expenses"] += Number(entry.amount_usd || 0);
+    grouped[entry.tax_year][isIncome(entry) ? "income" : "expenses"] += entryCountedAmount(entry);
   });
   return Object.entries(grouped)
     .map(([year, row]) => ({ year, ...row, net: row.income - row.expenses }))
@@ -1736,10 +1802,11 @@ function readinessFlags(yearTotals = totals()) {
   const quarterMap = {};
   rows.forEach(entry => {
     const quarter = quarterFromDate(entry.event_date);
-    if (!quarter) return;
+    if (!quarter || !countsInProfitLoss(entry)) return;
     quarterMap[quarter] ||= { income: 0, expenses: 0 };
-    if (isIncome(entry)) quarterMap[quarter].income += Number(entry.amount_usd || 0);
-    else quarterMap[quarter].expenses += Number(entry.amount_usd || 0);
+    const amount = entryCountedAmount(entry);
+    if (isIncome(entry)) quarterMap[quarter].income += amount;
+    else quarterMap[quarter].expenses += amount;
   });
   const highExpenseQuarters = Object.entries(quarterMap)
     .filter(([, totals]) => totals.expenses > 0 && (totals.income === 0 || totals.expenses >= totals.income * 1.5))
@@ -2107,8 +2174,8 @@ function renderRecordsProfitPreview(rows = recentFiveYearWindow()) {
 function renderScheduleSummary(rows) {
   if (!$("scheduleSummary")) return;
   const grouped = {};
-  rows.filter(e => !isIncome(e)).forEach(entry => {
-    grouped[entry.schedule_line] = (grouped[entry.schedule_line] || 0) + Number(entry.amount_usd || 0);
+  rows.filter(entry => !isIncome(entry) && countsInProfitLoss(entry)).forEach(entry => {
+    grouped[entry.schedule_line] = (grouped[entry.schedule_line] || 0) + entryCountedAmount(entry);
   });
   const lines = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
   $("scheduleSummary").innerHTML = lines.length
@@ -2712,9 +2779,20 @@ function validateAdvancedEntry() {
   return true;
 }
 
+function showAdvancedRecordForm() {
+  $("recordForm")?.classList.remove("advanced-hidden");
+  const panel = document.querySelector(".advanced-record-panel");
+  if (panel) {
+    panel.classList.remove("field-hidden");
+    panel.removeAttribute("aria-hidden");
+  }
+  if ($("openAdvancedForm")) $("openAdvancedForm").textContent = "Hide Tax-Pro Details";
+}
+
 function editRecord(id) {
   const entry = state.entries.find(row => String(row.id) === String(id));
   if (!entry) return;
+  syncWorkspaceFromEntry(entry);
   $("formTitle").textContent = `Edit Record #${id}`;
   $("recordId").value = entry.id;
   $("recordBusiness").value = entry.business_id || selectedBusinessId();
@@ -2744,6 +2822,7 @@ function editRecord(id) {
   $("editReason").value = "";
   $("scheduleLine").dataset.manual = "true";
   updateAdvancedCounterpartyLabel();
+  showAdvancedRecordForm();
   goToView("capture", "Add Record", "Answer one question at a time to save income, expenses, products, gifts, or barter.");
 }
 
@@ -2809,6 +2888,11 @@ async function resetAllSavedData() {
     await api("/api/reset", { method: "POST", body: JSON.stringify({ confirm: "RESET" }) });
     selectedBusinessMemory = "";
     selectedTaxYearMemory = "";
+    try {
+      sessionStorage.removeItem(workspaceMemoryKey);
+    } catch {
+      // Ignore storage errors in restricted browser modes.
+    }
     profitReviewSubmitted = false;
     currentFactorIndex = 0;
     profitReviewUnlocked = false;
@@ -2962,12 +3046,21 @@ function startNewBusinessInWizard() {
 
 async function refresh(options = {}) {
   const preserveSelection = options.preserveSelection !== false;
-  selectedTaxYearMemory = preserveSelection ? selectedTaxYearMemory || $("taxYear")?.value || "" : "";
-  selectedBusinessMemory = preserveSelection ? selectedBusinessMemory || $("businessFilter")?.value || "" : "";
+  if (preserveSelection) rememberWorkspaceSelection();
+  else {
+    selectedTaxYearMemory = "";
+    selectedBusinessMemory = "";
+    try {
+      sessionStorage.removeItem(workspaceMemoryKey);
+    } catch {
+      // Ignore storage errors in restricted browser modes.
+    }
+  }
   state = await api("/api/bootstrap");
   renderTaxYears();
   renderLineOptions();
   renderBusinessFilter();
+  applyWorkspaceSelection();
   resetForm();
   resetSimpleForm({ keepType: true });
   renderAll();
@@ -3008,7 +3101,9 @@ function focusApp() {
 }
 
 function goToView(view, title, subtitle) {
+  rememberWorkspaceSelection();
   showView(view, title, subtitle);
+  applyWorkspaceSelection();
   focusApp();
 }
 
@@ -3026,6 +3121,7 @@ function enterApp(view = "dashboard") {
 
 document.querySelectorAll(".nav").forEach(button => {
   button.addEventListener("click", () => {
+    rememberWorkspaceSelection();
     const labels = {
       dashboard: ["Home", "Choose the business and tax year, then add records as money moves."],
       capture: ["Add Record", "Answer one question at a time to save income, expenses, products, gifts, or barter."],
@@ -3034,6 +3130,7 @@ document.querySelectorAll(".nav").forEach(button => {
       imports: ["More", "Optional import, export, reset, and advanced tools."]
     };
     goToView(button.dataset.view, labels[button.dataset.view][0], labels[button.dataset.view][1]);
+    if (button.dataset.view === "dashboard") renderDashboard();
     if (button.dataset.view === "capture") renderRecordWizard();
     if (button.dataset.view === "records") {
       renderRecords();
@@ -3205,7 +3302,9 @@ $("clearEntryTopBtn").addEventListener("click", () => {
 $("resetAllDataTopBtn").addEventListener("click", resetAllSavedData);
 $("addMoreEntry").addEventListener("click", () => {
   $("postSavePanel")?.classList.add("field-hidden");
-  startWizardType(recordWizard.type);
+  const selectedId = $("businessFilter")?.value || recordWizard.businessId || "";
+  const selectedName = selectedId ? businessName(selectedId) : recordWizard.businessName;
+  startWizardType(recordWizard.type || "cash_income", { keepBusinessName: selectedName, keepBusinessId: selectedId });
 });
 $("completeYearReview").addEventListener("click", () => {
   $("postSavePanel")?.classList.add("field-hidden");
@@ -3244,11 +3343,13 @@ $("addRecordBtn").addEventListener("click", () => {
 
 $("taxYear").addEventListener("change", () => {
   selectedTaxYearMemory = $("taxYear").value;
+  rememberWorkspaceSelection();
   profitReviewSubmitted = false;
   currentFactorIndex = 0;
   $("recordTaxYear").value = $("taxYear").value;
   setDateBoundsForTaxYear();
   clearMismatchedDate("recordDate");
+  clearMismatchedDate("simpleDate");
   recordWizard.date = "";
   recordWizard.dateMonth = "";
   recordWizard.dateDay = "";
@@ -3260,7 +3361,7 @@ $("taxYear").addEventListener("change", () => {
   if (document.body.dataset.view === "capture") renderRecordWizard();
 });
 
-$("simpleDate").addEventListener("change", () => {});
+$("simpleDate").addEventListener("change", () => clearMismatchedDate("simpleDate", $("taxYear").value));
 $("recordDate").addEventListener("change", () => clearMismatchedDate("recordDate", $("recordTaxYear").value || $("taxYear").value));
 $("recordTaxYear").addEventListener("change", () => {
   if ($("recordTaxYear").value) {
@@ -3289,6 +3390,7 @@ $("businessFilter").addEventListener("change", () => {
     return;
   }
   selectedBusinessMemory = $("businessFilter").value;
+  rememberWorkspaceSelection();
   $("recordBusiness").value = $("businessFilter").value;
   $("simpleBusiness").value = $("businessFilter").value;
   recordWizard.businessId = $("businessFilter").value;
@@ -3322,7 +3424,11 @@ $("recordForm").addEventListener("submit", async (event) => {
     const payload = await formPayload();
     if (id) await api(`/api/entries/${id}`, { method: "PUT", body: JSON.stringify(payload) });
     else await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
+    selectedTaxYearMemory = String($("recordTaxYear").value || $("taxYear").value || "");
+    selectedBusinessMemory = String($("recordBusiness").value || $("businessFilter").value || "");
+    rememberWorkspaceSelection();
     await refresh();
+    applyWorkspaceSelection();
     toast(id ? "Record edited and recordkeeping history updated." : "Record saved.");
   } catch (error) {
     toast(errorMessage(error));
@@ -3404,21 +3510,15 @@ $("simpleEntryForm").addEventListener("submit", async (event) => {
     await api("/api/entries", { method: "POST", body: JSON.stringify(payload) });
     selectedTaxYearMemory = String(keepYear);
     selectedBusinessMemory = String(businessId);
+    rememberWorkspaceSelection();
     await refresh();
-    $("taxYear").value = keepYear;
-    $("recordTaxYear").value = keepYear;
+    applyWorkspaceSelection();
     $("simpleType").value = keepType;
-    $("simpleBusiness").value = String(businessId);
-    $("businessFilter").value = String(businessId);
-    selectedTaxYearMemory = String(keepYear);
-    selectedBusinessMemory = String(businessId);
-    updateBusinessSearchFromSelect();
     clearSimpleEntryFields();
     showPostSavePanel();
     renderDashboard();
     renderRecords();
     renderFactors();
-    updateExportLink();
     toast("Saved.");
   } catch (error) {
     toast(errorMessage(error));
@@ -3504,13 +3604,17 @@ document.body.addEventListener("click", async (event) => {
   if (del) {
     const reason = prompt("Reason for deleting this record? This will be preserved in the recordkeeping history.");
     if (reason === null) return;
+    rememberWorkspaceSelection();
     await api(`/api/entries/${del}?reason=${encodeURIComponent(reason || "Soft deleted by user")}`, { method: "DELETE" });
     await refresh();
+    applyWorkspaceSelection();
     toast("Record soft-deleted.");
   }
   if (restore) {
+    rememberWorkspaceSelection();
     await api(`/api/entries/${restore}/restore`, { method: "PUT", body: "{}" });
     await refresh();
+    applyWorkspaceSelection();
     toast("Record restored.");
   }
 });
@@ -3603,6 +3707,7 @@ $("exportSelectedYear")?.addEventListener("click", (event) => {
   downloadLocalCsv($("exportSelectedYear").getAttribute("href") || "/api/export.csv");
 });
 
+loadWorkspaceSelection();
 refresh().catch(async (error) => {
   localDemoMode = true;
   try {
